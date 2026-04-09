@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/yk920/Downloads/**)",
+      "Bash(bash scripts/verify_env.sh)"
+    ]
+  }
+}
