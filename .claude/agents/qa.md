@@ -47,13 +47,45 @@ tools: Read, Write, Bash, Task
 }
 ```
 
-## Discord 발송 (합격 시)
+## 합격 시 처리 순서
 
-`.env`의 `DISCORD_WEBHOOK_URL`로 POST. 페이로드:
-```json
-{
-  "content": "✅ QA 합격 — 발행 대기\n\n[글 본문]\n\npost_id: 123 / 재시도: 0회"
-}
+### 1단계 — Threads 발행 (2-step API)
+
+**.env**에서 `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` 읽기.
+
+**Step 1: 미디어 컨테이너 생성**
+```bash
+curl -s -X POST "https://graph.threads.net/v1.0/${THREADS_USER_ID}/threads" \
+  -d "media_type=TEXT" \
+  --data-urlencode "text=[글 본문 4줄]" \
+  -d "access_token=${THREADS_ACCESS_TOKEN}"
+```
+→ 응답에서 `id` 추출 (creation_id)
+
+**Step 2: 발행**
+```bash
+curl -s -X POST "https://graph.threads.net/v1.0/${THREADS_USER_ID}/threads_publish" \
+  -d "creation_id=[위에서 받은 id]" \
+  -d "access_token=${THREADS_ACCESS_TOKEN}"
+```
+→ 응답에서 `id` 추출 (threads_post_id)
+
+**Step 3: DB 업데이트**
+```sql
+UPDATE threads_posts
+SET status = 'published',
+    threads_post_id = '[threads_post_id]',
+    published_at = now()
+WHERE id = [post_id];
+```
+
+### 2단계 — Discord 발행 완료 알림
+
+`.env`의 `DISCORD_WEBHOOK_URL`로 POST:
+```bash
+curl -s -X POST "${DISCORD_WEBHOOK_URL}" \
+  -H "Content-Type: application/json" \
+  -d "{\"content\": \"✅ **Threads 발행 완료**\\n\\n[글 본문 4줄]\\n\\n🔗 https://www.threads.net/t/[threads_post_id 앞 10자]\\npost_id: [post_id] / 재시도: [retry_count]회\"}"
 ```
 
 ## Supervisor 보고

@@ -1,0 +1,118 @@
+{
+  "name": "로직해커 엑스 — 자기개선 루프 (3일마다 03:00 KST)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 */3 * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-optimizer",
+      "name": "Schedule Trigger (03:00 KST / 3일마다)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xgcdnnpsmohqfjwmyxkw.supabase.co/rest/v1/agent_messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"from_agent\":\"scheduler\",\"to_agent\":\"analyst\",\"message_type\":\"request\",\"topic\":\"optimizer_run\",\"payload\":{\"loop\":\"optimizer_3day\"},\"status\":\"pending\"}"
+      },
+      "id": "insert-optimizer-trigger",
+      "name": "Supabase — Insert Optimizer Trigger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xgcdnnpsmohqfjwmyxkw.supabase.co/rest/v1/schedule_runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"loop_name\":\"optimizer_3day\",\"status\":\"running\",\"meta\":{\"n8n_triggered\":true}}"
+      },
+      "id": "log-optimizer-run",
+      "name": "Supabase — Log Optimizer Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (03:00 KST / 3일마다)": {
+      "main": [
+        [
+          {
+            "node": "Supabase — Insert Optimizer Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase — Insert Optimizer Trigger": {
+      "main": [
+        [
+          {
+            "node": "Supabase — Log Optimizer Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

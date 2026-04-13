@@ -1,0 +1,118 @@
+{
+  "name": "로직해커 엑스 — 일반 발행 (오전 08:00 KST)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 23 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-morning",
+      "name": "Schedule Trigger (08:00 KST)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xgcdnnpsmohqfjwmyxkw.supabase.co/rest/v1/agent_messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"from_agent\":\"scheduler\",\"to_agent\":\"orchestrator\",\"message_type\":\"request\",\"topic\":\"daily_writer_morning_{{ $now.format('yyyy-MM-dd') }}\",\"payload\":{\"loop\":\"daily_writer\",\"time_slot\":\"morning\"},\"status\":\"pending\"}"
+      },
+      "id": "insert-agent-message",
+      "name": "Supabase — Insert Trigger Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xgcdnnpsmohqfjwmyxkw.supabase.co/rest/v1/schedule_runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_Lz0djS1miOV1j3BarGCjKA_1_9CJLfH"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"loop_name\":\"daily_writer\",\"status\":\"running\",\"meta\":{\"time_slot\":\"morning\",\"n8n_triggered\":true}}"
+      },
+      "id": "log-schedule-run",
+      "name": "Supabase — Log Schedule Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (08:00 KST)": {
+      "main": [
+        [
+          {
+            "node": "Supabase — Insert Trigger Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase — Insert Trigger Message": {
+      "main": [
+        [
+          {
+            "node": "Supabase — Log Schedule Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

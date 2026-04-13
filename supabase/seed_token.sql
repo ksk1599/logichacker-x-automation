@@ -4,8 +4,8 @@
 -- ⚠️ 이 파일은 .env 값을 참조해야 함.
 -- 실행 전에 아래 두 줄의 PLACEHOLDER를 실제 .env 값으로 바꾸세요:
 --
---   1. <THREADS_ACCESS_TOKEN_여기에_붙여넣기>
---   2. <THREADS_TOKEN_ISSUED_AT_여기에_YYYY-MM-DD>
+--   1. <THREADS_ACCESS_TOKEN_THAASoy7pLlZCBBUVRzY3FDT2gzZAnUtMFRVX1pkMlFzVjhTSW5KSGd2bTZA6UjJtQzRfUjR0UU14X3dLNThMeUJ1N3BDN3BZAYjBsdHJCTjlraVB3cUo1eG0xM25UZAFI1dlBGMWhfekhmamxNYU1iZAWNpZAmlYeUFzcmlydExYNDlDbzN2UQZDZD>
+--   2. <THREADS_TOKEN_ISSUED_AT_여기에_2026-04-08>
 --
 -- 그 다음 Supabase SQL Editor에 붙여넣고 Run.
 -- =====================================================

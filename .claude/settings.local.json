@@ -1,0 +1,8 @@
+{
+  "outputStyle": "beginner를 위한 설명 추가",
+  "permissions": {
+    "allow": [
+      "Skill(update-config)"
+    ]
+  }
+}

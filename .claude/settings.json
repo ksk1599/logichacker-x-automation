@@ -4,5 +4,18 @@
       "Read(//c/Users/yk920/Downloads/**)",
       "Bash(bash scripts/verify_env.sh)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"C:\\Users\\yk920\\Downloads\\로직해커 엑스 자동화 프로젝트\" && git diff --quiet && git diff --cached --quiet || (git add . && git commit -m \"auto: 세션 종료 자동 저장 $(date '+%Y-%m-%d %H:%M')\" && git push origin main)"
+          }
+        ]
+      }
+    ]
   }
 }

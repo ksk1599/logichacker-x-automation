@@ -28,3 +28,6 @@ venv/
 
 # Node
 node_modules/
+
+# Repomix
+repomix-output.xml
