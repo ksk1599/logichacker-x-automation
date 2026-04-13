@@ -1,8 +1,10 @@
 {
-  "outputStyle": "beginner를 위한 설명 추가",
   "permissions": {
     "allow": [
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
+      "Bash(tasklist /FI \"IMAGENAME eq python3.exe\")"
     ]
-  }
+  },
+  "outputStyle": "beginner를 위한 설명 추가"
 }
