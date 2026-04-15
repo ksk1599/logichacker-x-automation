@@ -3,7 +3,9 @@
     "allow": [
       "Skill(update-config)",
       "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
-      "Bash(tasklist /FI \"IMAGENAME eq python3.exe\")"
+      "Bash(tasklist /FI \"IMAGENAME eq python3.exe\")",
+      "Bash(python *)",
+      "Bash(del \"C:\\\\Users\\\\yk920\\\\Downloads\\\\pdf_content.txt\")"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
