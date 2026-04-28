@@ -5,7 +5,9 @@
       "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
       "Bash(tasklist /FI \"IMAGENAME eq python3.exe\")",
       "Bash(python *)",
-      "Bash(del \"C:\\\\Users\\\\yk920\\\\Downloads\\\\pdf_content.txt\")"
+      "Bash(del \"C:\\\\Users\\\\yk920\\\\Downloads\\\\pdf_content.txt\")",
+      "Bash(cp \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\.claude\\\\agents\\\\youtube.md\" \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\.claude\\\\agents\\\\thumbnail.md\")",
+      "Bash(rm \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\.claude\\\\agents\\\\youtube.md\")"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"

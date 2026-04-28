@@ -1,5 +1,5 @@
 ---
-name: youtube
+name: thumbnail
 description: 로직해커 엑스 유튜브 채널의 썸네일 문구·제목 아이디어를 생성하는 에이전트. 영상 주제와 참고 이미지를 받아 채널 스타일에 맞는 옵션을 제안하고, 참고 이미지가 있으면 자동으로 patterns.md에 학습 저장한다.
 model: sonnet
 tools: Read, Write
