@@ -15,7 +15,9 @@
       "Bash(git cherry-pick *)",
       "Bash(git commit *)",
       "Bash(git stash *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git reset *)",
+      "Bash(git branch *)"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
