@@ -150,28 +150,22 @@ with tab_full:
         height=100,
         key="full_title",
     )
-    intro_draft = st.text_area(
-        "도입부 초안",
-        placeholder="예: 상세페이지 다 만들었는데 왜 안 팔릴까요? 오늘은 그 이유를 알려드릴게요...",
-        height=180,
-        key="full_intro",
-    )
-    body_draft = st.text_area(
-        "본문 초안",
-        placeholder="예: 상세페이지 최상단에는 GIF가 들어가야 합니다. GIF는 고객의 시선을 잡아주고...",
-        height=300,
-        key="full_body",
+    script_draft = st.text_area(
+        "원고 초안 — 도입부+본문 전체를 한 번에 붙여넣기 하세요",
+        placeholder="예: 지금 상세페이지 디자이너한테 의뢰하려던 분, 잠시만 멈추고 이것부터 보세요...\n\n(도입부와 본문을 구분 없이 전체 붙여넣기 하시면 됩니다. AI가 구조를 파악합니다.)",
+        height=400,
+        key="full_draft",
     )
 
     if st.button("✨ 원고 완성하기", key="full_btn", type="primary"):
         if not full_topic.strip():
             st.warning("영상 주제를 입력해주세요.")
-        elif not intro_draft.strip() or not body_draft.strip():
-            st.warning("도입부와 본문 초안을 모두 입력해주세요.")
+        elif not script_draft.strip():
+            st.warning("원고 초안을 입력해주세요.")
         else:
             with st.spinner("Claude가 원고를 다듬는 중... (약 20~30초 소요)"):
                 try:
-                    result_full = call_full_script(full_topic, intro_draft, body_draft, full_title)
+                    result_full = call_full_script(full_topic, script_draft, full_title)
                 except Exception as e:
                     st.error(f"API 오류: {e}")
                     st.stop()
