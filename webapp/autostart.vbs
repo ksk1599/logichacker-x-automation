@@ -4,12 +4,16 @@
 Dim objShell
 Set objShell = CreateObject("WScript.Shell")
 
-' Streamlit 서버를 백그라운드(숨김 창)로 실행
-' WindowStyle 0 = 창 숨김, bWaitOnReturn False = 비동기 실행
-objShell.Run "cmd /c cd /d ""C:\Users\yk920\Downloads\로직해커 엑스 자동화 프로젝트\webapp"" && .venv\Scripts\streamlit run app.py --server.headless true", 0, False
+' streamlit.exe 직접 경로로 실행 (한글 경로 문제 우회)
+Dim streamlitPath
+Dim appPath
+streamlitPath = "C:\Users\yk920\Downloads\로직해커 엑스 자동화 프로젝트\webapp\.venv\Scripts\streamlit.exe"
+appPath = "C:\Users\yk920\Downloads\로직해커 엑스 자동화 프로젝트\webapp\app.py"
 
-' 서버가 뜰 때까지 6초 대기
-WScript.Sleep 6000
+objShell.Run """" & streamlitPath & """ run """ & appPath & """ --server.headless true", 0, False
+
+' 서버가 뜰 때까지 8초 대기
+WScript.Sleep 8000
 
 ' 브라우저에서 자동으로 열기
 objShell.Run "http://localhost:8501"

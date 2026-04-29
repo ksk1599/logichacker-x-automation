@@ -17,7 +17,10 @@
       "Bash(git stash *)",
       "Bash(git push *)",
       "Bash(git reset *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "PowerShell(Start-Process -FilePath \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\webapp\\\\.venv\\\\Scripts\\\\streamlit.exe\" -ArgumentList \"run\", \"app.py\", \"--server.headless\", \"true\" -WorkingDirectory \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\webapp\" -WindowStyle Minimized)",
+      "PowerShell(Start-Sleep -Seconds 6; Invoke-WebRequest -Uri \"http://localhost:8501\" -UseBasicParsing -TimeoutSec 5 | Select-Object StatusCode)",
+      "PowerShell(netstat *)"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
