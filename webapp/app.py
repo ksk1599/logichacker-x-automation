@@ -209,14 +209,26 @@ with tab_ppt:
                     st.stop()
 
             safe_title = re.sub(r'[\\/:*?"<>|]', '', ppt_title)[:30]
-            st.success("✅ 프레젠테이션 생성 완료!")
-            st.download_button(
-                label="⬇️ HTML 다운로드 (브라우저에서 바로 열기)",
-                data=html_result.encode("utf-8"),
-                file_name=f"{safe_title}.html",
-                mime="text/html",
-                key="ppt_dl_btn",
-            )
+            st.session_state["ppt_html"] = html_result
+            st.session_state["ppt_safe_title"] = safe_title
+
+    if st.session_state.get("ppt_html"):
+        html_result = st.session_state["ppt_html"]
+        safe_title  = st.session_state["ppt_safe_title"]
+
+        st.success("✅ 프레젠테이션 생성 완료!")
+        st.download_button(
+            label="⬇️ HTML 다운로드 (브라우저에서 바로 열기)",
+            data=html_result.encode("utf-8"),
+            file_name=f"{safe_title}.html",
+            mime="text/html",
+            key="ppt_dl_btn",
+        )
+
+        st.divider()
+        st.caption("👇 미리보기 — 방향키로 슬라이드를 넘겨보세요 (클릭 후 키 입력)")
+        import streamlit.components.v1 as components
+        components.html(html_result, height=520, scrolling=False)
 
     st.divider()
     st.caption("💡 다운로드한 .html 파일을 더블클릭하면 브라우저에서 바로 강의 슬라이드로 열립니다.")
