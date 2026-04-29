@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 from claude_client import call_thumbnail, call_script, call_full_script
+from ppt_generator import generate_ppt
 from auto_save import (
     get_next_thumbnail_letter,
     get_next_script_number,
@@ -166,6 +167,29 @@ with tab_full:
                     st.stop()
 
             st.markdown(result_full)
+            st.session_state["full_script_result"] = result_full
+            st.session_state["full_script_title"]  = full_title
+
+    # PPT 다운로드 버튼 (원고가 생성된 경우에만 표시)
+    if st.session_state.get("full_script_result"):
+        st.divider()
+        if st.button("📊 PPT로 만들기", key="ppt_btn"):
+            with st.spinner("PPT 생성 중..."):
+                try:
+                    ppt_bytes = generate_ppt(
+                        st.session_state["full_script_title"],
+                        st.session_state["full_script_result"],
+                    )
+                except Exception as e:
+                    st.error(f"PPT 생성 오류: {e}")
+                    st.stop()
+            st.download_button(
+                label="⬇️ PPT 다운로드",
+                data=ppt_bytes,
+                file_name="로직해커엑스_원고.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                key="ppt_download",
+            )
 
     st.divider()
     st.caption("💡 개인가치는 15가지 질문 중 영상 주제에 가장 맞는 1개를 AI가 자동 선택합니다.")
