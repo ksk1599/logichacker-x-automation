@@ -140,6 +140,16 @@ with tab_full:
         placeholder="상세페이지 최상단 GIF 기획법",
         key="full_topic",
     )
+    full_title = st.text_area(
+        "유튜브 제목 (선택) — 미리 만든 제목을 넣으면 원고 방향이 더 정확해집니다",
+        placeholder=(
+            "예:\n"
+            "유료강의에서 50만원 받고 가르치는 상세페이지 기획법, 걍 공개 | 스마트스토어 상세페이지 전환율\n"
+            "셀러 99%가 모르는 상세페이지 최상단의 비밀 | 스마트스토어 상세페이지 만들기 전환율"
+        ),
+        height=100,
+        key="full_title",
+    )
     intro_draft = st.text_area(
         "도입부 초안",
         placeholder="예: 상세페이지 다 만들었는데 왜 안 팔릴까요? 오늘은 그 이유를 알려드릴게요...",
@@ -161,7 +171,7 @@ with tab_full:
         else:
             with st.spinner("Claude가 원고를 다듬는 중... (약 20~30초 소요)"):
                 try:
-                    result_full = call_full_script(full_topic, intro_draft, body_draft)
+                    result_full = call_full_script(full_topic, intro_draft, body_draft, full_title)
                 except Exception as e:
                     st.error(f"API 오류: {e}")
                     st.stop()

@@ -181,11 +181,15 @@ def call_full_script(
     topic: str,
     intro_draft: str,
     body_draft: str,
+    title_ref: str = "",
 ) -> str:
     system = _read_agent_prompt("full_script")
 
+    title_block = f"## 유튜브 제목 (방향 참고용)\n{title_ref.strip()}\n\n" if title_ref.strip() else ""
+
     user_content = (
         f"영상 주제: {topic}\n\n"
+        f"{title_block}"
         f"## 도입부 초안\n{intro_draft}\n\n"
         f"## 본문 초안\n{body_draft}\n\n"
         "위 초안을 채널 스타일에 맞게 다듬고, 개인가치와 결론을 추가해주세요."
