@@ -199,7 +199,9 @@ def call_html_presentation(title: str, script: str) -> str:
 - 출력 시작: <section class="slide slide--intro active" id="slide-1"
 - 출력 끝: 마지막 슬라이드의 </section>
 - 코드블록(```html) 사용 금지 — 순수 HTML 태그만 출력
-- 슬라이드 수: 8~12장
+- 슬라이드 수: 최대 15장 (도입부·본문·개인가치·결론 모든 섹션 포함)
+- 섹션 순서: 도입부 → 본문 → 개인가치 → 결론 (원고에 있는 섹션은 빠짐없이 슬라이드로 제작)
+- 각 섹션 시작에는 섹션 구분 슬라이드(slide--content) 1장 삽입
 - 슬라이드당 핵심 요점만 (불릿 최대 4개, 한 항목 20자 이내)
 - 첫 슬라이드: class="slide slide--intro active", aria-hidden="false"
 - 나머지: active 클래스 없이, aria-hidden="true"
