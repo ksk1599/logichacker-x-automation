@@ -1,25 +1,29 @@
 """
-ppt_generator.py — 전체 원고를 PPT로 변환
-섹션별로 슬라이드를 자동 생성하고 bytes로 반환한다.
+ppt_generator.py — 강의용 PPT 생성기
+Claude가 정리한 슬라이드 데이터를 받아 .pptx 파일로 변환한다.
 """
 
 import io
 import re
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
+from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 
 
 # ── 디자인 상수 ────────────────────────────────────────────────────────
-BG_COLOR      = RGBColor(0x1A, 0x1A, 0x2E)   # 진한 남색 배경
-ACCENT_COLOR  = RGBColor(0xE9, 0x4F, 0x37)   # 포인트 빨강
-TITLE_COLOR   = RGBColor(0xFF, 0xFF, 0xFF)   # 흰색 제목
-BODY_COLOR    = RGBColor(0xD0, 0xD0, 0xD0)   # 연회색 본문
-TAG_COLOR     = RGBColor(0xE9, 0x4F, 0x37)   # 섹션 태그
-SLIDE_W       = Inches(13.33)
-SLIDE_H       = Inches(7.5)
+BG_DARK     = RGBColor(0x0F, 0x17, 0x2A)   # 메인 배경 (진한 남색)
+BG_SECTION  = RGBColor(0xF9, 0x73, 0x16)   # 섹션 구분 배경 (오렌지)
+BG_HIGHL    = RGBColor(0x1E, 0x29, 0x3B)   # 강조 슬라이드 배경 (중간 남색)
+WHITE       = RGBColor(0xFF, 0xFF, 0xFF)
+ORANGE      = RGBColor(0xF9, 0x73, 0x16)
+LIGHT_GRAY  = RGBColor(0xCB, 0xD5, 0xE1)
+YELLOW      = RGBColor(0xFB, 0xBF, 0x24)
+SLIDE_W     = Inches(13.33)
+SLIDE_H     = Inches(7.5)
 
+
+# ── 유틸 ──────────────────────────────────────────────────────────────
 
 def _set_bg(slide, color: RGBColor):
     fill = slide.background.fill
@@ -27,190 +31,238 @@ def _set_bg(slide, color: RGBColor):
     fill.fore_color.rgb = color
 
 
-def _add_textbox(slide, text: str, left, top, width, height,
-                 font_size=24, bold=False, color=TITLE_COLOR,
-                 align=PP_ALIGN.LEFT, wrap=True):
-    txBox = slide.shapes.add_textbox(left, top, width, height)
-    tf = txBox.text_frame
+def _blank_slide(prs):
+    return prs.slides.add_slide(prs.slide_layouts[6])
+
+
+def _add_text(slide, text, left, top, w, h,
+              size=24, bold=False, color=WHITE,
+              align=PP_ALIGN.LEFT, wrap=True, italic=False):
+    box = slide.shapes.add_textbox(left, top, w, h)
+    tf = box.text_frame
     tf.word_wrap = wrap
     p = tf.paragraphs[0]
     p.alignment = align
     run = p.add_run()
     run.text = text
-    run.font.size = Pt(font_size)
+    run.font.size = Pt(size)
     run.font.bold = bold
+    run.font.italic = italic
     run.font.color.rgb = color
-    return txBox
+    return box
 
 
-def _add_divider(slide, top, color=ACCENT_COLOR):
-    """가로 구분선 추가"""
-    line = slide.shapes.add_shape(
-        1,  # MSO_SHAPE_TYPE.RECTANGLE
-        Inches(0.5), top, Inches(12.33), Pt(3)
-    )
-    line.fill.solid()
-    line.fill.fore_color.rgb = color
-    line.line.fill.background()
+def _add_rect(slide, left, top, w, h, fill_color: RGBColor, radius=False):
+    shape = slide.shapes.add_shape(1, left, top, w, h)
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = fill_color
+    shape.line.fill.background()
+    return shape
 
 
-# ── 슬라이드 유형별 생성 함수 ─────────────────────────────────────────
-
-def _make_title_slide(prs, title: str):
-    """표지 슬라이드"""
-    slide = prs.slides.add_slide(prs.slide_layouts[6])  # 빈 레이아웃
-    _set_bg(slide, BG_COLOR)
-
-    # 채널 태그
-    _add_textbox(slide, "로직해커 엑스",
-                 Inches(0.6), Inches(1.5), Inches(12), Inches(0.6),
-                 font_size=18, color=ACCENT_COLOR)
-
-    # 메인 제목 (줄바꿈 처리)
-    display_title = title.split("|")[0].strip() if "|" in title else title
-    _add_textbox(slide, display_title,
-                 Inches(0.6), Inches(2.2), Inches(12), Inches(2.5),
-                 font_size=36, bold=True, color=TITLE_COLOR, wrap=True)
-
-    _add_divider(slide, Inches(5.0))
-
-    # SEO 부분 (| 이후)
-    if "|" in title:
-        seo = title.split("|")[1].strip()
-        _add_textbox(slide, seo,
-                     Inches(0.6), Inches(5.2), Inches(12), Inches(0.8),
-                     font_size=16, color=BODY_COLOR)
+def _strip_md(text: str) -> str:
+    """마크다운 기호 제거"""
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    text = re.sub(r"`(.+?)`", r"\1", text)
+    return text.strip()
 
 
-def _make_section_slide(prs, tag: str, heading: str, content: str):
-    """섹션 슬라이드 (태그 + 제목 + 내용)"""
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    _set_bg(slide, BG_COLOR)
-
-    # 섹션 태그 (예: 📌 도입부 · 문제제시)
-    _add_textbox(slide, tag,
-                 Inches(0.6), Inches(0.4), Inches(12), Inches(0.5),
-                 font_size=16, color=TAG_COLOR, bold=True)
-
-    _add_divider(slide, Inches(1.1))
-
-    # 슬라이드 제목
-    _add_textbox(slide, heading,
-                 Inches(0.6), Inches(1.3), Inches(12), Inches(1.2),
-                 font_size=30, bold=True, color=TITLE_COLOR)
-
-    # 본문 내용
-    # 마크다운 기호(**) 제거 후 표시
-    clean = re.sub(r"\*\*(.+?)\*\*", r"\1", content)
-    clean = re.sub(r"\*(.+?)\*", r"\1", clean)
-    clean = re.sub(r"`(.+?)`", r"\1", clean)
-    clean = clean.strip()
-
-    _add_textbox(slide, clean,
-                 Inches(0.6), Inches(2.7), Inches(12), Inches(4.2),
-                 font_size=20, color=BODY_COLOR, wrap=True)
-
-
-# ── 원고 파싱 ─────────────────────────────────────────────────────────
-
-def _parse_script(script: str) -> dict:
-    """
-    원고 텍스트에서 섹션별 내용을 추출한다.
-    ## 📌 도입부, ## 📖 본문, ## 💛 개인가치, ## 🎬 결론 기준으로 분리.
-    """
-    sections = {}
-
-    patterns = [
-        ("도입부", r"##\s*📌\s*도입부(.+?)(?=##\s*📖|##\s*💛|##\s*🎬|$)"),
-        ("본문",   r"##\s*📖\s*본문(.+?)(?=##\s*💛|##\s*🎬|$)"),
-        ("개인가치", r"##\s*💛\s*개인가치(.+?)(?=##\s*🎬|$)"),
-        ("결론",   r"##\s*🎬\s*결론(.+?)$"),
-    ]
-
-    for key, pattern in patterns:
-        m = re.search(pattern, script, re.DOTALL)
-        sections[key] = m.group(1).strip() if m else ""
-
-    return sections
-
-
-def _split_body(body: str) -> list:
-    """
-    본문에서 [주장], [근거], [원리], [예시], [반론], [대안] 블록을 분리.
-    각 블록을 (태그, 내용) 튜플 리스트로 반환.
-    """
-    tags = ["주장", "근거", "원리", "예시", "반론", "대안"]
+def _bold_parts(text: str):
+    """**굵게** 부분을 (text, bold) 튜플 리스트로 분리"""
+    parts = re.split(r"(\*\*.+?\*\*)", text)
     result = []
-
-    for tag in tags:
-        # **[주장]** 또는 [주장] 형태 모두 인식
-        pattern = rf"(?:\*\*)?\[{tag}\](?:\*\*)?(.+?)(?=(?:\*\*)?\[(?:주장|근거|원리|예시|반론|대안)\]|$)"
-        m = re.search(pattern, body, re.DOTALL)
-        if m:
-            result.append((tag, m.group(1).strip()))
-
-    # 블록 구분 실패 시 본문 전체를 하나의 슬라이드로
-    if not result:
-        result = [("본문", body)]
-
+    for p in parts:
+        if p.startswith("**") and p.endswith("**"):
+            result.append((p[2:-2], True))
+        elif p:
+            result.append((p, False))
     return result
 
 
-def _split_intro(intro: str) -> list:
-    """도입부에서 문제/사례/유인 블록 분리 (없으면 전체를 1장으로)"""
-    # 구분선(---) 기준으로 분리 시도
-    parts = [p.strip() for p in re.split(r"\n---+\n", intro) if p.strip()]
+def _add_text_with_bold(slide, text, left, top, w, h,
+                        size=24, base_color=WHITE, bold_color=YELLOW,
+                        align=PP_ALIGN.LEFT, wrap=True):
+    """**강조** 가 있을 경우 볼드+색상으로 렌더링"""
+    box = slide.shapes.add_textbox(left, top, w, h)
+    tf = box.text_frame
+    tf.word_wrap = wrap
+    p = tf.paragraphs[0]
+    p.alignment = align
+    for part_text, is_bold in _bold_parts(text):
+        run = p.add_run()
+        run.text = part_text
+        run.font.size = Pt(size)
+        run.font.bold = is_bold
+        run.font.color.rgb = bold_color if is_bold else base_color
+    return box
 
-    labels = ["문제제시", "사례제시", "유인제시"]
-    if len(parts) >= 3:
-        return list(zip(labels, parts[:3]))
-    elif len(parts) == 2:
-        return list(zip(labels[:2], parts))
-    else:
-        return [("도입부", intro)]
+
+# ── 슬라이드 유형별 생성 ───────────────────────────────────────────────
+
+def _slide_title(prs, title: str, subtitle: str = ""):
+    """표지 슬라이드"""
+    slide = _blank_slide(prs)
+    _set_bg(slide, BG_DARK)
+
+    # 왼쪽 오렌지 바
+    _add_rect(slide, Inches(0), Inches(0), Inches(0.18), SLIDE_H, ORANGE)
+
+    # 채널명
+    _add_text(slide, "로직해커 엑스", Inches(0.5), Inches(1.6),
+              Inches(12), Inches(0.6), size=18, color=ORANGE, bold=True)
+
+    # 메인 제목
+    display = title.split("|")[0].strip() if "|" in title else title
+    _add_text(slide, display, Inches(0.5), Inches(2.3),
+              Inches(12), Inches(2.8), size=38, bold=True, color=WHITE, wrap=True)
+
+    # 구분선
+    _add_rect(slide, Inches(0.5), Inches(5.3), Inches(4), Pt(3), ORANGE)
+
+    if subtitle:
+        _add_text(slide, subtitle, Inches(0.5), Inches(5.6),
+                  Inches(12), Inches(0.8), size=20, color=LIGHT_GRAY)
+
+
+def _slide_section(prs, section_name: str, slide_title: str):
+    """섹션 구분 슬라이드 — 오렌지 배경"""
+    slide = _blank_slide(prs)
+    _set_bg(slide, BG_SECTION)
+
+    # 섹션 번호 느낌의 큰 배경 텍스트
+    _add_text(slide, section_name, Inches(0.5), Inches(2.0),
+              Inches(12), Inches(1.0), size=22, color=WHITE, bold=False,
+              align=PP_ALIGN.CENTER)
+
+    # 구분선
+    _add_rect(slide, Inches(4.5), Inches(3.2), Inches(4.3), Pt(3),
+              RGBColor(0xFF, 0xFF, 0xFF))
+
+    _add_text(slide, slide_title, Inches(0.5), Inches(3.5),
+              Inches(12), Inches(1.8), size=40, bold=True, color=WHITE,
+              align=PP_ALIGN.CENTER, wrap=True)
+
+
+def _slide_bullets(prs, title: str, points: list):
+    """핵심 포인트 슬라이드 — 불릿 리스트"""
+    slide = _blank_slide(prs)
+    _set_bg(slide, BG_DARK)
+
+    # 상단 오렌지 바
+    _add_rect(slide, Inches(0), Inches(0), SLIDE_W, Inches(0.12), ORANGE)
+
+    # 슬라이드 제목
+    _add_text_with_bold(slide, title, Inches(0.6), Inches(0.3),
+                        Inches(11.5), Inches(1.0),
+                        size=30, base_color=WHITE, bold_color=YELLOW,
+                        align=PP_ALIGN.LEFT)
+
+    # 구분선
+    _add_rect(slide, Inches(0.6), Inches(1.4), Inches(11), Pt(2), ORANGE)
+
+    # 불릿 포인트들
+    y_positions = [Inches(1.7), Inches(2.65), Inches(3.6), Inches(4.55)]
+    for i, point in enumerate(points[:4]):
+        y = y_positions[i]
+        # 오렌지 동그라미 마커
+        _add_rect(slide, Inches(0.55), y + Inches(0.12),
+                  Pt(14), Pt(14), ORANGE)
+        # 포인트 텍스트
+        _add_text_with_bold(slide, point.lstrip("•- ").strip(),
+                            Inches(0.95), y, Inches(11.5), Inches(0.85),
+                            size=26, base_color=LIGHT_GRAY, bold_color=YELLOW)
+
+
+def _slide_highlight(prs, quote: str, desc: str = ""):
+    """임팩트 강조 슬라이드 — 한 줄 핵심 문구"""
+    slide = _blank_slide(prs)
+    _set_bg(slide, BG_HIGHL)
+
+    # 큰 따옴표 장식
+    _add_text(slide, "❝", Inches(0.5), Inches(0.8),
+              Inches(2), Inches(1.5), size=72, color=ORANGE, bold=True)
+
+    # 핵심 문구
+    _add_text_with_bold(slide, quote, Inches(0.6), Inches(2.0),
+                        Inches(12), Inches(2.2),
+                        size=36, base_color=WHITE, bold_color=YELLOW,
+                        align=PP_ALIGN.CENTER, wrap=True)
+
+    if desc:
+        _add_text(slide, _strip_md(desc), Inches(0.6), Inches(5.0),
+                  Inches(12), Inches(1.2), size=20, color=LIGHT_GRAY,
+                  align=PP_ALIGN.CENTER)
+
+
+# ── 슬라이드 데이터 파서 ──────────────────────────────────────────────
+
+def _parse_slide_data(raw: str) -> list:
+    """
+    Claude가 반환한 텍스트를 슬라이드 딕셔너리 리스트로 파싱한다.
+    """
+    slides = []
+    blocks = re.split(r"\[(?:TITLE|SECTION|BULLETS|HIGHLIGHT)\]", raw)
+    tags   = re.findall(r"\[(TITLE|SECTION|BULLETS|HIGHLIGHT)\]", raw)
+
+    for tag, block in zip(tags, blocks[1:]):
+        lines = [l.strip() for l in block.strip().splitlines() if l.strip()]
+        data  = {"type": tag.lower()}
+
+        for line in lines:
+            if ":" in line:
+                key, _, val = line.partition(":")
+                data[key.strip()] = val.strip()
+            elif line.startswith("•") or line.startswith("-"):
+                data.setdefault("points", []).append(line)
+
+        slides.append(data)
+
+    return slides
 
 
 # ── 메인 함수 ─────────────────────────────────────────────────────────
 
-def generate_ppt(title: str, script: str) -> bytes:
+def generate_ppt(title: str, slide_content: str) -> bytes:
     """
-    title  : 유튜브 제목
-    script : 전체 원고 (## 섹션 마크다운 형식)
-    return : .pptx 파일 bytes
+    title        : 강의 제목
+    slide_content: Claude call_ppt_content() 반환값
+    return       : .pptx bytes
     """
     prs = Presentation()
     prs.slide_width  = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    sections = _parse_script(script)
+    slides_data = _parse_slide_data(slide_content)
 
-    # 1. 표지
-    _make_title_slide(prs, title)
+    for s in slides_data:
+        t = s.get("type", "")
 
-    # 2. 도입부 슬라이드들
-    intro_parts = _split_intro(sections.get("도입부", ""))
-    for label, content in intro_parts:
-        _make_section_slide(prs, f"📌 도입부 · {label}", label, content)
+        if t == "title":
+            _slide_title(prs,
+                         s.get("제목", title),
+                         s.get("부제", ""))
 
-    # 3. 본문 슬라이드들
-    body_parts = _split_body(sections.get("본문", ""))
-    body_labels = {"주장": "핵심 주장", "근거": "근거", "원리": "원리",
-                   "예시": "예시", "반론": "반론", "대안": "대안"}
-    for tag, content in body_parts:
-        heading = body_labels.get(tag, tag)
-        _make_section_slide(prs, f"📖 본문 · {tag}", heading, content)
+        elif t == "section":
+            _slide_section(prs,
+                           s.get("섹션명", ""),
+                           s.get("슬라이드제목", ""))
 
-    # 4. 개인가치
-    if sections.get("개인가치"):
-        # 선택 질문 줄 제거하고 내용만 추출
-        pv_content = re.sub(r">?\s*선택한 질문:.+?\n", "", sections["개인가치"]).strip()
-        _make_section_slide(prs, "💛 개인가치", "나의 이야기", pv_content)
+        elif t == "bullets":
+            points = s.get("points", [])
+            _slide_bullets(prs,
+                           s.get("슬라이드제목", ""),
+                           points)
 
-    # 5. 결론
-    if sections.get("결론"):
-        _make_section_slide(prs, "🎬 결론", "마무리", sections["결론"])
+        elif t == "highlight":
+            _slide_highlight(prs,
+                             s.get("강조문구", ""),
+                             s.get("설명", ""))
 
-    # bytes로 반환
+    # 슬라이드가 하나도 없으면 기본 표지만
+    if len(prs.slides) == 0:
+        _slide_title(prs, title)
+
     buf = io.BytesIO()
     prs.save(buf)
     buf.seek(0)

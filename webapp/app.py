@@ -30,7 +30,7 @@ st.set_page_config(
 st.title("🎬 로직해커 엑스 콘텐츠 도구")
 st.caption("썸네일 문구·제목 생성 / 첫 30초 후킹 원고 생성")
 
-tab_thumbnail, tab_script, tab_full = st.tabs(["📌 썸네일 만들기", "🎙️ 30초 원고", "📝 전체 원고"])
+tab_thumbnail, tab_script, tab_full, tab_ppt = st.tabs(["📌 썸네일 만들기", "🎙️ 30초 원고", "📝 전체 원고", "📊 PPT 만들기"])
 
 
 # ── 탭 1: 썸네일 만들기 ───────────────────────────────────────────────
@@ -167,29 +167,57 @@ with tab_full:
                     st.stop()
 
             st.markdown(result_full)
-            st.session_state["full_script_result"] = result_full
-            st.session_state["full_script_title"]  = full_title
-
-    # PPT 다운로드 버튼 (원고가 생성된 경우에만 표시)
-    if st.session_state.get("full_script_result"):
-        st.divider()
-        if st.button("📊 PPT로 만들기", key="ppt_btn"):
-            with st.spinner("PPT 생성 중..."):
-                try:
-                    ppt_bytes = generate_ppt(
-                        st.session_state["full_script_title"],
-                        st.session_state["full_script_result"],
-                    )
-                except Exception as e:
-                    st.error(f"PPT 생성 오류: {e}")
-                    st.stop()
-            st.download_button(
-                label="⬇️ PPT 다운로드",
-                data=ppt_bytes,
-                file_name="로직해커엑스_원고.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                key="ppt_download",
-            )
 
     st.divider()
     st.caption("💡 개인가치는 15가지 질문 중 영상 주제에 가장 맞는 1개를 AI가 자동 선택합니다.")
+
+
+# ── 탭 4: PPT 만들기 ──────────────────────────────────────────────────
+with tab_ppt:
+    st.subheader("강의용 PPT 만들기")
+    st.caption("완성된 원고를 붙여넣으면 강의 슬라이드로 자동 변환합니다.")
+
+    ppt_title = st.text_input(
+        "강의 제목",
+        placeholder="예: 셀러 99%가 모르는 상세페이지 최상단의 비밀",
+        key="ppt_title",
+    )
+    ppt_script = st.text_area(
+        "원고 붙여넣기 — 전체 원고 탭에서 완성한 원고를 그대로 붙여넣으세요",
+        placeholder="## 📌 도입부\n...\n\n## 📖 본문\n...\n\n## 💛 개인가치\n...\n\n## 🎬 결론\n...",
+        height=350,
+        key="ppt_script",
+    )
+
+    if st.button("📊 PPT 생성하기", key="ppt_gen_btn", type="primary"):
+        if not ppt_title.strip():
+            st.warning("강의 제목을 입력해주세요.")
+        elif not ppt_script.strip():
+            st.warning("원고를 붙여넣어 주세요.")
+        else:
+            with st.spinner("Claude가 슬라이드 내용을 정리하는 중... (약 20~30초 소요)"):
+                try:
+                    from claude_client import call_ppt_content
+                    slide_data = call_ppt_content(ppt_title, ppt_script)
+                except Exception as e:
+                    st.error(f"API 오류: {e}")
+                    st.stop()
+
+            with st.spinner("PPT 파일 생성 중..."):
+                try:
+                    ppt_bytes = generate_ppt(ppt_title, slide_data)
+                except Exception as e:
+                    st.error(f"PPT 생성 오류: {e}")
+                    st.stop()
+
+            st.success(f"✅ 슬라이드 생성 완료!")
+            st.download_button(
+                label="⬇️ PPT 다운로드 (.pptx)",
+                data=ppt_bytes,
+                file_name=f"{ppt_title[:20]}.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                key="ppt_dl_btn",
+            )
+
+    st.divider()
+    st.caption("💡 슬라이드당 핵심 내용만 뽑아 강의하기 좋은 형태로 만들어집니다.")

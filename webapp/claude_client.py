@@ -177,6 +177,55 @@ def call_script(
     return resp.content[0].text
 
 
+def call_ppt_content(title: str, script: str) -> str:
+    system = """당신은 강의용 PPT 슬라이드 설계 전문가입니다.
+유튜브 원고를 받아 강의 슬라이드에 최적화된 구조로 변환합니다.
+
+## 규칙
+- 슬라이드 1장 = 핵심 개념 1개
+- 불릿 포인트: 슬라이드당 최대 4개, 각 항목 15자 이내
+- 전체 문장 금지 — 핵심어/구 중심으로 압축
+- 강조할 핵심어는 ** ** 로 표시
+- 원고의 흐름과 순서를 유지
+
+## 출력 형식 (정확히 이 형식으로만 출력)
+
+[TITLE]
+제목: {title}
+부제: (한 줄 부제목)
+
+[SECTION]
+섹션명: 도입부
+슬라이드제목: (섹션 소개 제목)
+
+[BULLETS]
+슬라이드제목: (이 슬라이드의 핵심 질문이나 주제)
+• (핵심어/구 1)
+• (핵심어/구 2)
+• (핵심어/구 3)
+
+[HIGHLIGHT]
+강조문구: (임팩트 있는 한 줄, 20자 이내)
+설명: (한 줄 보충 설명)
+
+[SECTION]
+섹션명: 본문
+...
+
+각 섹션마다 위 형식의 슬라이드를 2~5장 생성하세요.
+도입부·본문·개인가치·결론 순서를 유지하세요."""
+
+    user_content = f"강의 제목: {title}\n\n원고:\n{script}"
+
+    resp = _get_client().messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        system=system,
+        messages=[{"role": "user", "content": user_content}],
+    )
+    return resp.content[0].text
+
+
 def call_full_script(
     topic: str,
     script_draft: str,
