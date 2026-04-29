@@ -741,8 +741,8 @@ class Presentation {
     to.setAttribute('aria-hidden', 'false');
 
     this.current = index;
-    this._syncHash();
-    this._updateUI();
+    try { this._syncHash(); } catch(e) {}
+    try { this._updateUI(); } catch(e) {}
 
     // 완료 감지
     let done = false;
