@@ -178,43 +178,76 @@ def call_script(
 
 
 def call_html_presentation(title: str, script: str) -> str:
-    """원고를 받아 완전한 HTML 프레젠테이션 파일을 생성한다."""
+    """
+    원고 → HTML 프레젠테이션.
+    Claude는 <section> 슬라이드만 생성하고,
+    Python이 검증된 템플릿 CSS·JS에 직접 주입한다.
+    """
     template_path = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "references" / "template.html"
     skill_path    = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "SKILL.md"
     template = template_path.read_text(encoding="utf-8")
     skill_md = _strip_frontmatter(skill_path.read_text(encoding="utf-8"))
 
-    system = f"""당신은 HTML 강의 프레젠테이션 생성 전문가입니다.
-사용자의 강의 원고를 받아 웹 프레젠테이션 HTML 파일로 변환합니다.
+    system = f"""당신은 HTML 강의 슬라이드 작성 전문가입니다.
+사용자의 강의 원고를 슬라이드 섹션으로 변환합니다.
 
-## 제작 규칙
+## 슬라이드 제작 규칙
 {skill_md}
 
-## 기반 템플릿 (CSS·JS 완전 보존)
-{template}
-
-## 지시사항
-1. 위 템플릿의 **CSS와 JavaScript를 한 글자도 바꾸지 말고 그대로 유지**하세요
-2. `<section class="slide ...">` 부분만 원고 내용으로 교체하세요
-3. 강의 스타일에 맞는 슬라이드 타입 조합 사용 (slide--intro / slide--content / slide--content-alt / slide--diagram / slide--end)
-4. 슬라이드당 핵심 내용만 압축 — 불릿 최대 4개, 텍스트는 짧고 굵게
-5. `slideCounter` 초기값과 총 슬라이드 수를 실제 생성한 수와 반드시 일치시키세요
-6. 완전한 HTML 파일 전체를 출력하세요 (```html 코드블록 없이 순수 HTML만)"""
+## 출력 규칙 (매우 중요)
+- <section> 요소들만 출력하세요. HTML 전체 파일 금지.
+- 출력 시작: <section class="slide slide--intro active" id="slide-1"
+- 출력 끝: 마지막 슬라이드의 </section>
+- 코드블록(```html) 사용 금지 — 순수 HTML 태그만 출력
+- 슬라이드 수: 8~12장
+- 슬라이드당 핵심 요점만 (불릿 최대 4개, 한 항목 20자 이내)
+- 첫 슬라이드: class="slide slide--intro active", aria-hidden="false"
+- 나머지: active 클래스 없이, aria-hidden="true"
+- 마지막 슬라이드: class="slide slide--end""""
 
     user_content = f"강의 제목: {title}\n\n원고:\n{script}"
 
     resp = _get_client().messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=8192,
+        max_tokens=6000,
         system=system,
         messages=[{"role": "user", "content": user_content}],
     )
-    raw = resp.content[0].text.strip()
-    # Claude가 ```html 코드블록으로 감쌀 경우 제거
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
-    return raw.strip()
+    slides_html = resp.content[0].text.strip()
+
+    # 코드블록 래퍼 제거
+    if "```" in slides_html:
+        slides_html = re.sub(r"```[a-zA-Z]*\n?", "", slides_html).strip()
+
+    # 슬라이드 수 계산
+    slide_count = len(re.findall(r'<section\s+class="slide', slides_html))
+    if slide_count == 0:
+        slide_count = 1
+
+    # ── 템플릿에 슬라이드 주입 ──────────────────────────────────────
+    # viewport div 안의 기존 슬라이드 콘텐츠를 교체
+    marker_start = '<div class="slide-viewport" id="viewport">'
+    marker_nav   = '<!-- 네비게이션 UI -->'
+
+    vp_start = template.index(marker_start) + len(marker_start)
+    nav_pos  = template.index(marker_nav)
+    # viewport 닫는 </div> 위치 (네비게이션 주석 바로 앞)
+    vp_end   = template.rindex('</div>', 0, nav_pos)
+
+    result = (
+        template[:vp_start]
+        + "\n\n" + slides_html + "\n\n"
+        + template[vp_end:]
+    )
+
+    # 슬라이드 카운터 초기값 업데이트 (01 / 10 → 01 / NN)
+    padded = str(slide_count).zfill(2)
+    result = result.replace(">01 / 10<", f">01 / {padded}<")
+
+    # <title> 태그 교체
+    result = re.sub(r"<title>.*?</title>", f"<title>{title}</title>", result)
+
+    return result
 
 
 def call_ppt_content(title: str, script: str) -> str:
