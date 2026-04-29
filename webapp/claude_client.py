@@ -203,7 +203,7 @@ def call_html_presentation(title: str, script: str) -> str:
 - 슬라이드당 핵심 요점만 (불릿 최대 4개, 한 항목 20자 이내)
 - 첫 슬라이드: class="slide slide--intro active", aria-hidden="false"
 - 나머지: active 클래스 없이, aria-hidden="true"
-- 마지막 슬라이드: class="slide slide--end""""
+- 마지막 슬라이드: class="slide slide--end" """
 
     user_content = f"강의 제목: {title}\n\n원고:\n{script}"
 
