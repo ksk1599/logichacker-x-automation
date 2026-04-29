@@ -135,13 +135,8 @@ with tab_full:
     st.subheader("전체 원고 다듬기")
     st.caption("도입부·본문 초안을 주면 다듬어드리고, 개인가치·결론을 자동으로 생성합니다.")
 
-    full_topic = st.text_input(
-        "영상 주제",
-        placeholder="상세페이지 최상단 GIF 기획법",
-        key="full_topic",
-    )
     full_title = st.text_area(
-        "유튜브 제목 (선택) — 미리 만든 제목을 넣으면 원고 방향이 더 정확해집니다",
+        "유튜브 제목 — 제목을 넣으면 원고 방향이 정확해집니다",
         placeholder=(
             "예:\n"
             "유료강의에서 50만원 받고 가르치는 상세페이지 기획법, 걍 공개 | 스마트스토어 상세페이지 전환율\n"
@@ -158,14 +153,14 @@ with tab_full:
     )
 
     if st.button("✨ 원고 완성하기", key="full_btn", type="primary"):
-        if not full_topic.strip():
-            st.warning("영상 주제를 입력해주세요.")
+        if not full_title.strip():
+            st.warning("유튜브 제목을 입력해주세요.")
         elif not script_draft.strip():
             st.warning("원고 초안을 입력해주세요.")
         else:
             with st.spinner("Claude가 원고를 다듬는 중... (약 20~30초 소요)"):
                 try:
-                    result_full = call_full_script(full_topic, script_draft, full_title)
+                    result_full = call_full_script(full_title, script_draft, full_title)
                 except Exception as e:
                     st.error(f"API 오류: {e}")
                     st.stop()
