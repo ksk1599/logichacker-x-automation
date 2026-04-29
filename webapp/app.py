@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 from claude_client import call_thumbnail, call_script, call_full_script, call_html_presentation
+from pptx_builder import build_pptx
 from auto_save import (
     get_next_thumbnail_letter,
     get_next_script_number,
@@ -217,13 +218,35 @@ with tab_ppt:
         safe_title  = st.session_state["ppt_safe_title"]
 
         st.success("✅ 프레젠테이션 생성 완료!")
-        st.download_button(
-            label="⬇️ HTML 다운로드 (브라우저에서 바로 열기)",
-            data=html_result.encode("utf-8"),
-            file_name=f"{safe_title}.html",
-            mime="text/html",
-            key="ppt_dl_btn",
-        )
+
+        col_html, col_pptx = st.columns(2)
+
+        with col_html:
+            st.download_button(
+                label="⬇️ HTML 다운로드 (브라우저 강의용)",
+                data=html_result.encode("utf-8"),
+                file_name=f"{safe_title}.html",
+                mime="text/html",
+                key="ppt_dl_btn",
+                use_container_width=True,
+            )
+            st.caption("브라우저에서 열면 방향키·전체화면 지원")
+
+        with col_pptx:
+            with st.spinner("PowerPoint 파일 변환 중..."):
+                try:
+                    pptx_bytes = build_pptx(html_result)
+                    st.download_button(
+                        label="⬇️ PPT 다운로드 (PowerPoint)",
+                        data=pptx_bytes,
+                        file_name=f"{safe_title}.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key="ppt_pptx_btn",
+                        use_container_width=True,
+                    )
+                    st.caption("PowerPoint / Keynote에서 편집 가능")
+                except Exception as e:
+                    st.error(f"PPT 변환 오류: {e}")
 
         st.divider()
         st.caption("👇 미리보기 — 방향키로 슬라이드를 넘겨보세요 (클릭 후 키 입력)")
