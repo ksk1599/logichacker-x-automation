@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
-from claude_client import call_thumbnail, call_script
+from claude_client import call_thumbnail, call_script, call_full_script
 from auto_save import (
     get_next_thumbnail_letter,
     get_next_script_number,
@@ -29,7 +29,7 @@ st.set_page_config(
 st.title("🎬 로직해커 엑스 콘텐츠 도구")
 st.caption("썸네일 문구·제목 생성 / 첫 30초 후킹 원고 생성")
 
-tab_thumbnail, tab_script = st.tabs(["📌 썸네일 만들기", "🎙️ 30초 원고"])
+tab_thumbnail, tab_script, tab_full = st.tabs(["📌 썸네일 만들기", "🎙️ 30초 원고", "📝 전체 원고"])
 
 
 # ── 탭 1: 썸네일 만들기 ───────────────────────────────────────────────
@@ -128,3 +128,45 @@ with tab_script:
 
     st.divider()
     st.caption("💡 레퍼런스 원고 없이도 기존 학습 패턴으로 원고를 생성할 수 있습니다.")
+
+
+# ── 탭 3: 전체 원고 ───────────────────────────────────────────────────
+with tab_full:
+    st.subheader("전체 원고 다듬기")
+    st.caption("도입부·본문 초안을 주면 다듬어드리고, 개인가치·결론을 자동으로 생성합니다.")
+
+    full_topic = st.text_input(
+        "영상 주제",
+        placeholder="상세페이지 최상단 GIF 기획법",
+        key="full_topic",
+    )
+    intro_draft = st.text_area(
+        "도입부 초안",
+        placeholder="예: 상세페이지 다 만들었는데 왜 안 팔릴까요? 오늘은 그 이유를 알려드릴게요...",
+        height=180,
+        key="full_intro",
+    )
+    body_draft = st.text_area(
+        "본문 초안",
+        placeholder="예: 상세페이지 최상단에는 GIF가 들어가야 합니다. GIF는 고객의 시선을 잡아주고...",
+        height=300,
+        key="full_body",
+    )
+
+    if st.button("✨ 원고 완성하기", key="full_btn", type="primary"):
+        if not full_topic.strip():
+            st.warning("영상 주제를 입력해주세요.")
+        elif not intro_draft.strip() or not body_draft.strip():
+            st.warning("도입부와 본문 초안을 모두 입력해주세요.")
+        else:
+            with st.spinner("Claude가 원고를 다듬는 중... (약 20~30초 소요)"):
+                try:
+                    result_full = call_full_script(full_topic, intro_draft, body_draft)
+                except Exception as e:
+                    st.error(f"API 오류: {e}")
+                    st.stop()
+
+            st.markdown(result_full)
+
+    st.divider()
+    st.caption("💡 개인가치는 15가지 질문 중 영상 주제에 가장 맞는 1개를 AI가 자동 선택합니다.")

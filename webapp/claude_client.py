@@ -175,3 +175,26 @@ def call_script(
         messages=[{"role": "user", "content": user_content}],
     )
     return resp.content[0].text
+
+
+def call_full_script(
+    topic: str,
+    intro_draft: str,
+    body_draft: str,
+) -> str:
+    system = _read_agent_prompt("full_script")
+
+    user_content = (
+        f"영상 주제: {topic}\n\n"
+        f"## 도입부 초안\n{intro_draft}\n\n"
+        f"## 본문 초안\n{body_draft}\n\n"
+        "위 초안을 채널 스타일에 맞게 다듬고, 개인가치와 결론을 추가해주세요."
+    )
+
+    resp = _get_client().messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8192,
+        system=system,
+        messages=[{"role": "user", "content": user_content}],
+    )
+    return resp.content[0].text
