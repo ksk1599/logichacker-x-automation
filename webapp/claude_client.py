@@ -177,6 +177,46 @@ def call_script(
     return resp.content[0].text
 
 
+def call_html_presentation(title: str, script: str) -> str:
+    """원고를 받아 완전한 HTML 프레젠테이션 파일을 생성한다."""
+    template_path = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "references" / "template.html"
+    skill_path    = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "SKILL.md"
+    template = template_path.read_text(encoding="utf-8")
+    skill_md = _strip_frontmatter(skill_path.read_text(encoding="utf-8"))
+
+    system = f"""당신은 HTML 강의 프레젠테이션 생성 전문가입니다.
+사용자의 강의 원고를 받아 웹 프레젠테이션 HTML 파일로 변환합니다.
+
+## 제작 규칙
+{skill_md}
+
+## 기반 템플릿 (CSS·JS 완전 보존)
+{template}
+
+## 지시사항
+1. 위 템플릿의 **CSS와 JavaScript를 한 글자도 바꾸지 말고 그대로 유지**하세요
+2. `<section class="slide ...">` 부분만 원고 내용으로 교체하세요
+3. 강의 스타일에 맞는 슬라이드 타입 조합 사용 (slide--intro / slide--content / slide--content-alt / slide--diagram / slide--end)
+4. 슬라이드당 핵심 내용만 압축 — 불릿 최대 4개, 텍스트는 짧고 굵게
+5. `slideCounter` 초기값과 총 슬라이드 수를 실제 생성한 수와 반드시 일치시키세요
+6. 완전한 HTML 파일 전체를 출력하세요 (```html 코드블록 없이 순수 HTML만)"""
+
+    user_content = f"강의 제목: {title}\n\n원고:\n{script}"
+
+    resp = _get_client().messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8192,
+        system=system,
+        messages=[{"role": "user", "content": user_content}],
+    )
+    raw = resp.content[0].text.strip()
+    # Claude가 ```html 코드블록으로 감쌀 경우 제거
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+    return raw.strip()
+
+
 def call_ppt_content(title: str, script: str) -> str:
     system = """당신은 강의용 PPT 슬라이드 설계 전문가입니다.
 유튜브 원고를 받아 강의 슬라이드에 최적화된 구조로 변환합니다.

@@ -5,6 +5,7 @@ app.py — 로직해커 엑스 콘텐츠 도구 (Streamlit 로컬 웹앱)
       또는 run.bat 더블클릭
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -12,8 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
-from claude_client import call_thumbnail, call_script, call_full_script
-from ppt_generator import generate_ppt
+from claude_client import call_thumbnail, call_script, call_full_script, call_html_presentation
 from auto_save import (
     get_next_thumbnail_letter,
     get_next_script_number,
@@ -172,10 +172,16 @@ with tab_full:
     st.caption("💡 개인가치는 15가지 질문 중 영상 주제에 가장 맞는 1개를 AI가 자동 선택합니다.")
 
 
-# ── 탭 4: PPT 만들기 ──────────────────────────────────────────────────
+# ── 탭 4: 프레젠테이션 만들기 ─────────────────────────────────────────
 with tab_ppt:
-    st.subheader("강의용 PPT 만들기")
-    st.caption("완성된 원고를 붙여넣으면 강의 슬라이드로 자동 변환합니다.")
+    st.subheader("강의용 웹 프레젠테이션 만들기")
+    st.caption("원고를 붙여넣으면 방향키·전체화면을 지원하는 HTML 슬라이드로 변환합니다.")
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.info("**사용법**\n1. 제목 입력\n2. 원고 붙여넣기\n3. 생성 버튼 클릭\n4. HTML 다운로드\n5. 브라우저에서 열기")
+    with col2:
+        st.info("**조작 키**\n← → : 슬라이드 이동\nF : 전체화면\nSpace : 다음 슬라이드\nHome/End : 처음/끝")
 
     ppt_title = st.text_input(
         "강의 제목",
@@ -185,39 +191,32 @@ with tab_ppt:
     ppt_script = st.text_area(
         "원고 붙여넣기 — 전체 원고 탭에서 완성한 원고를 그대로 붙여넣으세요",
         placeholder="## 📌 도입부\n...\n\n## 📖 본문\n...\n\n## 💛 개인가치\n...\n\n## 🎬 결론\n...",
-        height=350,
+        height=380,
         key="ppt_script",
     )
 
-    if st.button("📊 PPT 생성하기", key="ppt_gen_btn", type="primary"):
+    if st.button("✨ 프레젠테이션 생성하기", key="ppt_gen_btn", type="primary"):
         if not ppt_title.strip():
             st.warning("강의 제목을 입력해주세요.")
         elif not ppt_script.strip():
             st.warning("원고를 붙여넣어 주세요.")
         else:
-            with st.spinner("Claude가 슬라이드 내용을 정리하는 중... (약 20~30초 소요)"):
+            with st.spinner("Claude가 슬라이드를 설계하는 중... (약 30~60초 소요)"):
                 try:
-                    from claude_client import call_ppt_content
-                    slide_data = call_ppt_content(ppt_title, ppt_script)
+                    html_result = call_html_presentation(ppt_title, ppt_script)
                 except Exception as e:
                     st.error(f"API 오류: {e}")
                     st.stop()
 
-            with st.spinner("PPT 파일 생성 중..."):
-                try:
-                    ppt_bytes = generate_ppt(ppt_title, slide_data)
-                except Exception as e:
-                    st.error(f"PPT 생성 오류: {e}")
-                    st.stop()
-
-            st.success(f"✅ 슬라이드 생성 완료!")
+            safe_title = re.sub(r'[\\/:*?"<>|]', '', ppt_title)[:30]
+            st.success("✅ 프레젠테이션 생성 완료!")
             st.download_button(
-                label="⬇️ PPT 다운로드 (.pptx)",
-                data=ppt_bytes,
-                file_name=f"{ppt_title[:20]}.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                label="⬇️ HTML 다운로드 (브라우저에서 바로 열기)",
+                data=html_result.encode("utf-8"),
+                file_name=f"{safe_title}.html",
+                mime="text/html",
                 key="ppt_dl_btn",
             )
 
     st.divider()
-    st.caption("💡 슬라이드당 핵심 내용만 뽑아 강의하기 좋은 형태로 만들어집니다.")
+    st.caption("💡 다운로드한 .html 파일을 더블클릭하면 브라우저에서 바로 강의 슬라이드로 열립니다.")
