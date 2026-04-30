@@ -22,7 +22,9 @@
       "PowerShell(Start-Sleep -Seconds 6; Invoke-WebRequest -Uri \"http://localhost:8501\" -UseBasicParsing -TimeoutSec 5 | Select-Object StatusCode)",
       "PowerShell(netstat *)",
       "PowerShell(Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\webapp'; .venv\\\\Scripts\\\\streamlit.exe run app.py\" -WindowStyle Normal)",
-      "PowerShell(& \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\webapp\\\\.venv\\\\Scripts\\\\pip.exe\" install python-pptx>=0.6.21 --quiet)"
+      "PowerShell(& \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\webapp\\\\.venv\\\\Scripts\\\\pip.exe\" install python-pptx>=0.6.21 --quiet)",
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(git add *)"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
