@@ -27,7 +27,9 @@
       "Bash(git add *)",
       "Bash(netstat -ano)",
       "Bash(schtasks /query /tn \"로직해커엑스_웹앱\")",
-      "PowerShell(schtasks /query /tn \"������Ŀ����_����\" /fo LIST)"
+      "PowerShell(schtasks /query /tn \"������Ŀ����_����\" /fo LIST)",
+      "Bash(.venv/Scripts/python -c \"import claude_client; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import app; print\\('OK'\\)\")"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
