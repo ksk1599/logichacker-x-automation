@@ -251,6 +251,7 @@ def call_html_presentation(
     title: str,
     script: str,
     uploaded_images: Optional[list[tuple[str, bytes]]] = None,
+    image_guide: str = "",
 ) -> str:
     """
     원고 → HTML 프레젠테이션.
@@ -258,7 +259,7 @@ def call_html_presentation(
     Python이 검증된 템플릿 CSS·JS에 직접 주입한다.
 
     uploaded_images: [(설명, bytes), ...] 형태로 앱에서 업로드한 이미지.
-                     있으면 이것을 우선 사용, 없으면 ppt/참고자료/ 폴더 이미지 사용.
+    image_guide: 사용자가 자유롭게 쓴 이미지 배치 안내 ("1번은 NNG 설명에 써주세요" 등).
     """
     template_path = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "references" / "template.html"
     skill_path    = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "SKILL.md"
@@ -269,24 +270,33 @@ def call_html_presentation(
     if uploaded_images:
         # 업로드된 이미지를 placeholder → data URL 딕셔너리로 변환
         img_placeholders: dict[str, str] = {}
-        desc_lines: list[str] = []
-        for i, (desc, raw_bytes) in enumerate(uploaded_images, start=1):
-            ext_guess = "png"  # bytes 매직 넘버로 판별
+        for i, (_, raw_bytes) in enumerate(uploaded_images, start=1):
+            ext_guess = "png"
             if raw_bytes[:3] == b'\xff\xd8\xff':
                 ext_guess = "jpeg"
             mime = f"image/{ext_guess}"
             b64 = base64.standard_b64encode(raw_bytes).decode()
             data_url = f"data:{mime};base64,{b64}"
-            key = f"{{{{IMG_{i}}}}}"
-            img_placeholders[key] = data_url
-            desc_lines.append(f"  - {{{{IMG_{i}}}}}: {desc}")
+            img_placeholders[f"{{{{IMG_{i}}}}}"] = data_url
+
+        # 이미지 목록 (번호만, 설명은 사용자 안내문으로 대체)
+        img_list = "\n".join(
+            f"  - {{{{IMG_{i}}}}}: 이미지 {i}번"
+            for i in range(1, len(uploaded_images) + 1)
+        )
+
+        # 사용자 배치 안내문 (없으면 기본 지시)
+        guide_block = (
+            f"\n### 이미지 배치 안내 (사용자 지시)\n{image_guide.strip()}"
+            if image_guide.strip()
+            else "\n원고 내용과 가장 자연스럽게 어울리는 위치에 각 이미지를 배치하세요."
+        )
 
         img_instruction = (
-            "\n\n## 사용 가능한 참고 이미지\n"
-            "원고에서 아래 이미지와 관련된 주제가 나오면 해당 슬라이드에 삽입하세요.\n"
-            + "\n".join(desc_lines)
-            + """
-
+            f"\n\n## 사용 가능한 참고 이미지 ({len(uploaded_images)}장)\n"
+            f"{img_list}\n"
+            f"{guide_block}\n"
+            """
 ### 이미지 삽입 방법
 텍스트와 이미지를 나란히 배치할 때 (img-split 레이아웃):
 <div class="img-split reveal">

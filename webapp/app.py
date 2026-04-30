@@ -198,7 +198,6 @@ with tab_ppt:
 
     # ── 이미지 첨부 ──────────────────────────────────────────────────
     with st.expander("📎 슬라이드에 넣을 이미지 첨부 (선택)", expanded=False):
-        st.caption("이미지를 올리고 '어느 슬라이드에 쓸지' 설명을 적어주세요. Claude가 원고와 맞춰서 자동 배치합니다.")
         uploaded_imgs = st.file_uploader(
             "이미지 선택 (PNG·JPG, 여러 장 가능)",
             type=["png", "jpg", "jpeg"],
@@ -206,23 +205,33 @@ with tab_ppt:
             key="ppt_img_upload",
         )
 
-        ppt_img_data = []  # [(설명, bytes), ...]
+        ppt_img_data = []   # [(빈 문자열, bytes), ...]  — 설명은 아래 통합 안내문으로 처리
+        img_guide = ""      # 사용자가 자유롭게 쓰는 이미지 배치 안내
+
         if uploaded_imgs:
+            # 번호 붙인 썸네일 가로 나열
+            cols = st.columns(min(len(uploaded_imgs), 4))
             for i, img_file in enumerate(uploaded_imgs):
-                col_thumb, col_desc = st.columns([1, 3])
-                with col_thumb:
-                    st.image(img_file, width=110)
-                with col_desc:
-                    desc = st.text_input(
-                        f"이미지 {i+1} 설명",
-                        placeholder="예: Nielsen Norman Group F패턴 시선 흐름 / 러닝 고글 제품 사진",
-                        key=f"ppt_img_desc_{i}",
-                    )
+                with cols[i % 4]:
+                    st.image(img_file, caption=f"이미지 {i+1}", width=130)
                 img_file.seek(0)
-                ppt_img_data.append((desc or f"이미지 {i+1}", img_file.read()))
-            st.caption(f"✅ {len(ppt_img_data)}장 첨부됨 — 생성 버튼을 누르면 슬라이드에 자동 배치됩니다.")
-        else:
-            ppt_img_data = []
+                ppt_img_data.append(("", img_file.read()))
+
+            st.markdown(f"**총 {len(ppt_img_data)}장 업로드됨**")
+
+            img_guide = st.text_area(
+                "이미지 배치 안내 — 번호를 보며 어느 슬라이드에 쓸지 자유롭게 적어주세요",
+                placeholder=(
+                    "예)\n"
+                    "1번, 2번, 3번은 Nielsen Norman Group 연구 설명할 때 써주세요.\n"
+                    "4번은 첫 번째 사례인 러닝 고글 슬라이드에 넣어주세요.\n"
+                    "5번은 두 번째 사례인 목 견인기 슬라이드에 넣어주세요.\n"
+                    "6번은 커리어해커 알렉스를 소개하는 슬라이드에 써주세요."
+                ),
+                height=130,
+                key="ppt_img_guide",
+            )
+            st.caption("설명이 구체적일수록 Claude가 정확한 위치에 배치합니다.")
 
     if st.button("✨ 프레젠테이션 생성하기", key="ppt_gen_btn", type="primary"):
         if not ppt_title.strip():
@@ -235,6 +244,7 @@ with tab_ppt:
                     html_result = call_html_presentation(
                         ppt_title, ppt_script,
                         uploaded_images=ppt_img_data if ppt_img_data else None,
+                        image_guide=img_guide if ppt_img_data else "",
                     )
                 except Exception as e:
                     st.error(f"API 오류: {e}")
