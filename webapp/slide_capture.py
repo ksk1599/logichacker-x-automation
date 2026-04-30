@@ -8,32 +8,86 @@ import tempfile
 from io import BytesIO
 from pathlib import Path
 
+# 슬라이드 캡처 해상도: 16:9, 고해상도
+CAPTURE_W = 1920
+CAPTURE_H = 1080
 
-# ── 애니메이션 무효화 CSS ────────────────────────────────────────────────
-# 스크린샷 캡처 시 전환 효과 없이 즉시 슬라이드를 표시하기 위한 오버라이드
-_CAPTURE_CSS = """
+
+# ── 캡처용 CSS 주입 ─────────────────────────────────────────────────────
+# 전환 애니메이션 제거, 숨겨진 요소 강제 표시
+_CAPTURE_CSS = f"""
 <style id="capture-override">
-*, *::before, *::after {
+html, body {{
+  width:  {CAPTURE_W}px !important;
+  height: {CAPTURE_H}px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #0a0a0f !important;
+}}
+.slide-viewport, #viewport {{
+  position: fixed !important;
+  inset: 0 !important;
+  width:  {CAPTURE_W}px !important;
+  height: {CAPTURE_H}px !important;
+  background: #0a0a0f !important;
+  overflow: hidden !important;
+}}
+*, *::before, *::after {{
   transition: none !important;
   animation: none !important;
   animation-duration: 0s !important;
-}
-.slide {
-  transition: none !important;
-}
-/* reveal 클래스 요소: 항상 표시 */
-.reveal, [class*="reveal"], .appear, [data-reveal] {
+}}
+/* reveal/appear 요소 즉시 표시 */
+.reveal, [class*="reveal"], .appear, [data-reveal] {{
   opacity: 1 !important;
   transform: none !important;
   filter: none !important;
-}
+  visibility: visible !important;
+}}
 </style>
 """
 
 
 def _inject_capture_css(html: str) -> str:
-    """HTML에 캡처용 CSS 주입 (애니메이션 제거, 콘텐츠 전부 표시)"""
     return html.replace('</head>', _CAPTURE_CSS + '</head>', 1)
+
+
+# ── JavaScript: 슬라이드 즉시 전환 ────────────────────────────────────
+def _go_slide_js(i: int) -> str:
+    """CSS transition 없이 index i 슬라이드를 즉시 표시하는 JS"""
+    return f"""
+        (function() {{
+            const vp = document.getElementById('viewport') ||
+                       document.querySelector('.slide-viewport');
+            if (!vp) return;
+
+            // 뷰포트 강제 풀스크린
+            vp.style.cssText += '; position:fixed !important; inset:0 !important; ' +
+                                 'width:{CAPTURE_W}px !important; height:{CAPTURE_H}px !important;';
+
+            const slides = vp.querySelectorAll('.slide');
+            const idx = {i};
+
+            slides.forEach((s, n) => {{
+                s.style.transition = 'none';
+                s.classList.remove('active', 'stand-left');
+                if (n < idx) {{
+                    s.style.cssText += '; opacity:0; transform:translateX(-100%); pointer-events:none;';
+                    s.classList.add('stand-left');
+                }} else if (n === idx) {{
+                    s.style.cssText += '; opacity:1; transform:translateX(0); pointer-events:auto;';
+                    s.classList.add('active');
+                    // 해당 슬라이드의 모든 reveal 요소 즉시 표시
+                    s.querySelectorAll('.reveal, [class*="reveal"], .appear').forEach(el => {{
+                        el.style.cssText += '; opacity:1 !important; transform:none !important; filter:none !important;';
+                    }});
+                }} else {{
+                    s.style.cssText += '; opacity:0; transform:translateX(100%); pointer-events:none;';
+                }}
+            }});
+        }})();
+    """
 
 
 def capture_slides(html: str, progress_callback=None) -> list[bytes]:
@@ -42,15 +96,16 @@ def capture_slides(html: str, progress_callback=None) -> list[bytes]:
 
     Args:
         html: 완성된 HTML 프레젠테이션 문자열
-        progress_callback: capture_slides(i, total) 형태로 호출되는 진행 콜백 (선택)
+        progress_callback: (current, total) 형태로 호출되는 진행 콜백 (선택)
 
     Returns:
-        PNG 바이트 리스트 (슬라이드 순서대로)
+        PNG 바이트 리스트 (슬라이드 순서대로, 각 1920×1080)
     """
     try:
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.common.by import By
         from webdriver_manager.chrome import ChromeDriverManager
     except ImportError as e:
         raise RuntimeError(
@@ -72,73 +127,62 @@ def capture_slides(html: str, progress_callback=None) -> list[bytes]:
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1920,1080')
+    options.add_argument(f'--window-size={CAPTURE_W},{CAPTURE_H}')
     options.add_argument('--hide-scrollbars')
     options.add_argument('--force-device-scale-factor=1')
-    # 폰트 렌더링 개선
-    options.add_argument('--disable-font-subpixel-positioning')
-    options.add_argument('--enable-font-antialiasing')
 
     driver = None
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
-        driver.set_window_size(1920, 1080)
+
+        # CDP로 정확한 뷰포트 크기 강제 지정
+        driver.execute_cdp_cmd('Emulation.setDeviceMetricsOverride', {
+            'width':             CAPTURE_W,
+            'height':            CAPTURE_H,
+            'deviceScaleFactor': 1,
+            'mobile':            False,
+        })
 
         file_url = 'file:///' + tmp_path.as_posix().lstrip('/')
         driver.get(file_url)
 
         # 폰트·이미지 로딩 대기
-        time.sleep(2.0)
+        time.sleep(2.5)
 
         # 총 슬라이드 수
         total = driver.execute_script(
-            'return document.querySelectorAll("#viewport .slide").length || '
-            'document.querySelectorAll(".slide").length'
+            'return (document.getElementById("viewport") || document.querySelector(".slide-viewport") || document.body)'
+            '.querySelectorAll(".slide").length'
         )
         if not total:
             raise RuntimeError("슬라이드를 찾을 수 없습니다. HTML 구조를 확인하세요.")
+
+        # #viewport 요소 (element 단위 스크린샷용)
+        try:
+            vp_el = driver.find_element(By.CSS_SELECTOR, '#viewport, .slide-viewport')
+        except Exception:
+            vp_el = None
 
         screenshots: list[bytes] = []
         for i in range(total):
             if progress_callback:
                 progress_callback(i, total)
 
-            # DOM 직접 조작으로 슬라이드 전환 (CSS transition 없이 즉시)
-            driver.execute_script(f"""
-                const viewport = document.getElementById('viewport') ||
-                                 document.querySelector('.slide-viewport') ||
-                                 document.body;
-                const slides = viewport.querySelectorAll('.slide');
-                const idx = {i};
-                slides.forEach((s, n) => {{
-                    s.classList.remove('active', 'stand-left');
-                    s.style.opacity   = '0';
-                    s.style.transform = 'translateX(100%)';
-                    s.style.pointerEvents = 'none';
-                    if (n < idx) {{
-                        s.classList.add('stand-left');
-                        s.style.transform = 'translateX(-100%)';
-                    }} else if (n === idx) {{
-                        s.classList.add('active');
-                        s.style.opacity   = '1';
-                        s.style.transform = 'translateX(0)';
-                        s.style.pointerEvents = 'auto';
-                    }}
-                }});
-                /* 현재 슬라이드의 모든 reveal 요소 즉시 표시 */
-                const cur = slides[idx];
-                if (cur) {{
-                    cur.querySelectorAll('.reveal, [class*="reveal"], .appear').forEach(el => {{
-                        el.style.opacity   = '1';
-                        el.style.transform = 'none';
-                        el.style.filter    = 'none';
-                    }});
-                }}
-            """)
-            # 렌더링 완료 대기 (짧아도 됨 — transition 비활성화됨)
-            time.sleep(0.15)
-            screenshots.append(driver.get_screenshot_as_png())
+            # CSS transition 없이 슬라이드 즉시 전환
+            driver.execute_script(_go_slide_js(i))
+            time.sleep(0.2)
+
+            # viewport 요소 스크린샷 우선 (여백 제거 보장)
+            if vp_el:
+                try:
+                    png = vp_el.screenshot_as_png
+                    screenshots.append(_ensure_size(png))
+                    continue
+                except Exception:
+                    pass
+            # fallback: 전체 화면 스크린샷
+            screenshots.append(_ensure_size(driver.get_screenshot_as_png()))
 
         return screenshots
 
@@ -151,15 +195,34 @@ def capture_slides(html: str, progress_callback=None) -> list[bytes]:
         tmp_path.unlink(missing_ok=True)
 
 
+def _ensure_size(png_bytes: bytes) -> bytes:
+    """PNG를 정확히 CAPTURE_W × CAPTURE_H 로 리사이즈 (Pillow 있을 때만)"""
+    try:
+        from PIL import Image
+        img = Image.open(BytesIO(png_bytes))
+        if img.size != (CAPTURE_W, CAPTURE_H):
+            img = img.resize((CAPTURE_W, CAPTURE_H), Image.LANCZOS)
+            buf = BytesIO()
+            img.save(buf, format='PNG')
+            return buf.getvalue()
+    except ImportError:
+        pass  # Pillow 없으면 그냥 원본 반환
+    return png_bytes
+
+
 def screenshots_to_pptx(screenshots: list[bytes]) -> bytes:
-    """PNG 스크린샷 리스트 → PPTX 바이트 (슬라이드 = 이미지 1장)"""
+    """PNG 스크린샷 리스트 → PPTX 바이트 (슬라이드 전체를 이미지로 채움)"""
     from pptx import Presentation
-    from pptx.util import Inches
+    from pptx.util import Inches, Emu
     from pptx.dml.color import RGBColor
 
+    # 16:9 와이드 슬라이드 (1920:1080 비율과 동일)
+    SLIDE_W = Inches(13.33)
+    SLIDE_H = Inches(7.5)
+
     prs = Presentation()
-    prs.slide_width  = Inches(13.33)
-    prs.slide_height = Inches(7.5)
+    prs.slide_width  = SLIDE_W
+    prs.slide_height = SLIDE_H
 
     blank_layout = prs.slide_layouts[6]
 
@@ -171,12 +234,11 @@ def screenshots_to_pptx(screenshots: list[bytes]) -> bytes:
         fill.solid()
         fill.fore_color.rgb = RGBColor(0x0A, 0x0A, 0x0F)
 
-        # 슬라이드 전체를 스크린샷으로 채우기
+        # 슬라이드 전체를 스크린샷으로 채우기 (0,0 부터 슬라이드 전체 크기)
         slide.shapes.add_picture(
             BytesIO(png_bytes),
-            0, 0,
-            prs.slide_width,
-            prs.slide_height,
+            Emu(0), Emu(0),
+            SLIDE_W, SLIDE_H,
         )
 
     buf = BytesIO()
