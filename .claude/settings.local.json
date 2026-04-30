@@ -31,7 +31,8 @@
       "Bash(.venv/Scripts/python -c \"import claude_client; print\\('OK'\\)\")",
       "Bash(.venv/Scripts/python -c \"import app; print\\('OK'\\)\")",
       "Bash(.venv/Scripts/python -c \"import claude_client, app; print\\('OK'\\)\")",
-      "Bash(.venv/Scripts/python.exe -c \"import pptx_builder; print\\('OK'\\)\")"
+      "Bash(.venv/Scripts/python.exe -c \"import pptx_builder; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"from slide_capture import html_to_pptx; print\\('OK'\\)\")"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
