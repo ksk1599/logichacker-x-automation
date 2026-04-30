@@ -196,6 +196,34 @@ with tab_ppt:
         key="ppt_script",
     )
 
+    # ── 이미지 첨부 ──────────────────────────────────────────────────
+    with st.expander("📎 슬라이드에 넣을 이미지 첨부 (선택)", expanded=False):
+        st.caption("이미지를 올리고 '어느 슬라이드에 쓸지' 설명을 적어주세요. Claude가 원고와 맞춰서 자동 배치합니다.")
+        uploaded_imgs = st.file_uploader(
+            "이미지 선택 (PNG·JPG, 여러 장 가능)",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True,
+            key="ppt_img_upload",
+        )
+
+        ppt_img_data = []  # [(설명, bytes), ...]
+        if uploaded_imgs:
+            for i, img_file in enumerate(uploaded_imgs):
+                col_thumb, col_desc = st.columns([1, 3])
+                with col_thumb:
+                    st.image(img_file, width=110)
+                with col_desc:
+                    desc = st.text_input(
+                        f"이미지 {i+1} 설명",
+                        placeholder="예: Nielsen Norman Group F패턴 시선 흐름 / 러닝 고글 제품 사진",
+                        key=f"ppt_img_desc_{i}",
+                    )
+                img_file.seek(0)
+                ppt_img_data.append((desc or f"이미지 {i+1}", img_file.read()))
+            st.caption(f"✅ {len(ppt_img_data)}장 첨부됨 — 생성 버튼을 누르면 슬라이드에 자동 배치됩니다.")
+        else:
+            ppt_img_data = []
+
     if st.button("✨ 프레젠테이션 생성하기", key="ppt_gen_btn", type="primary"):
         if not ppt_title.strip():
             st.warning("강의 제목을 입력해주세요.")
@@ -204,7 +232,10 @@ with tab_ppt:
         else:
             with st.spinner("Claude가 슬라이드를 설계하는 중... (약 30~60초 소요)"):
                 try:
-                    html_result = call_html_presentation(ppt_title, ppt_script)
+                    html_result = call_html_presentation(
+                        ppt_title, ppt_script,
+                        uploaded_images=ppt_img_data if ppt_img_data else None,
+                    )
                 except Exception as e:
                     st.error(f"API 오류: {e}")
                     st.stop()

@@ -247,20 +247,67 @@ def _load_ref_images() -> tuple[dict[str, str], str]:
     return placeholders, instruction
 
 
-def call_html_presentation(title: str, script: str) -> str:
+def call_html_presentation(
+    title: str,
+    script: str,
+    uploaded_images: Optional[list[tuple[str, bytes]]] = None,
+) -> str:
     """
     원고 → HTML 프레젠테이션.
     Claude는 <section> 슬라이드만 생성하고,
     Python이 검증된 템플릿 CSS·JS에 직접 주입한다.
-    참고자료 폴더에 이미지가 있으면 자동으로 슬라이드에 삽입한다.
+
+    uploaded_images: [(설명, bytes), ...] 형태로 앱에서 업로드한 이미지.
+                     있으면 이것을 우선 사용, 없으면 ppt/참고자료/ 폴더 이미지 사용.
     """
     template_path = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "references" / "template.html"
     skill_path    = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "SKILL.md"
     template = template_path.read_text(encoding="utf-8")
     skill_md = _strip_frontmatter(skill_path.read_text(encoding="utf-8"))
 
-    # 참고 이미지 로드
-    img_placeholders, img_instruction = _load_ref_images()
+    # ── 이미지 소스 결정: 업로드 우선, 없으면 폴더 ─────────────────
+    if uploaded_images:
+        # 업로드된 이미지를 placeholder → data URL 딕셔너리로 변환
+        img_placeholders: dict[str, str] = {}
+        desc_lines: list[str] = []
+        for i, (desc, raw_bytes) in enumerate(uploaded_images, start=1):
+            ext_guess = "png"  # bytes 매직 넘버로 판별
+            if raw_bytes[:3] == b'\xff\xd8\xff':
+                ext_guess = "jpeg"
+            mime = f"image/{ext_guess}"
+            b64 = base64.standard_b64encode(raw_bytes).decode()
+            data_url = f"data:{mime};base64,{b64}"
+            key = f"{{{{IMG_{i}}}}}"
+            img_placeholders[key] = data_url
+            desc_lines.append(f"  - {{{{IMG_{i}}}}}: {desc}")
+
+        img_instruction = (
+            "\n\n## 사용 가능한 참고 이미지\n"
+            "원고에서 아래 이미지와 관련된 주제가 나오면 해당 슬라이드에 삽입하세요.\n"
+            + "\n".join(desc_lines)
+            + """
+
+### 이미지 삽입 방법
+텍스트와 이미지를 나란히 배치할 때 (img-split 레이아웃):
+<div class="img-split reveal">
+  <div><ul><li>핵심 내용</li></ul></div>
+  <div>
+    <img class="slide-img" src="{{IMG_N}}" alt="설명">
+    <p class="img-caption">캡션</p>
+  </div>
+</div>
+
+이미지만 강조할 때 (img-center 레이아웃):
+<div class="img-center reveal">
+  <img class="slide-img" src="{{IMG_N}}" alt="설명">
+</div>
+
+중요: {{IMG_N}}을 그대로 출력하세요. Python이 실제 이미지로 교체합니다.
+"""
+        )
+    else:
+        # 폴더 이미지 폴백
+        img_placeholders, img_instruction = _load_ref_images()
 
     system = f"""당신은 HTML 강의 슬라이드 작성 전문가입니다.
 사용자의 강의 원고를 슬라이드 섹션으로 변환합니다.
