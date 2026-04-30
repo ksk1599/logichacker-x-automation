@@ -7,28 +7,34 @@ import base64
 import re
 from io import BytesIO
 
+from lxml import etree
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
+from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+from pptx.oxml.ns import qn
 
 # ── 색상 (template.html 디자인 시스템과 동일) ──────────────────────────
-BG          = RGBColor(0x0A, 0x0A, 0x0F)   # 배경 (거의 검정)
-ACCENT      = RGBColor(0xC6, 0xA5, 0x5C)   # 금색 강조
-TEXT_PRI    = RGBColor(0xF0, 0xEB, 0xE0)   # 본문 (밝은 크림)
-TEXT_SEC    = RGBColor(0xB8, 0xB0, 0xA0)   # 보조 텍스트
-TEXT_DIM    = RGBColor(0x70, 0x68, 0x58)   # 흐린 텍스트
-BULLET_DOT  = RGBColor(0xC6, 0xA5, 0x5C)   # 불릿 점 색상 (금색)
+BG          = RGBColor(0x0A, 0x0A, 0x0F)
+ACCENT      = RGBColor(0xC6, 0xA5, 0x5C)
+TEXT_PRI    = RGBColor(0xF0, 0xEB, 0xE0)
+TEXT_SEC    = RGBColor(0xB8, 0xB0, 0xA0)
+TEXT_DIM    = RGBColor(0x70, 0x68, 0x58)
 
 # ── 슬라이드 크기: 16:9 와이드 ────────────────────────────────────────
-W = Inches(13.33)   # 너비
-H = Inches(7.5)     # 높이
+W = Inches(13.33)
+H = Inches(7.5)
 
-# ── 마진 ──────────────────────────────────────────────────────────────
 MARGIN_L  = Inches(0.8)
 MARGIN_T  = Inches(0.6)
 MARGIN_R  = Inches(0.8)
 CONTENT_W = W - MARGIN_L - MARGIN_R
+
+# PPTX 네임스페이스
+_P = 'http://schemas.openxmlformats.org/presentationml/2006/main'
+
+# 사용할 한국어 폰트 (Windows 기본 내장)
+KO_FONT = 'Malgun Gothic'
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -38,7 +44,6 @@ CONTENT_W = W - MARGIN_L - MARGIN_R
 def _strip_tags(html: str) -> str:
     """HTML 태그 제거 후 공백 정리"""
     text = re.sub(r'<[^>]+>', '', html)
-    # HTML 엔티티 기본 처리
     text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') \
                .replace('&nbsp;', ' ').replace('&#39;', "'").replace('&quot;', '"')
     return re.sub(r'\s+', ' ', text).strip()
@@ -54,22 +59,17 @@ def _set_bg(slide, color: RGBColor):
 def _add_image_from_b64(slide, data_url: str, left, top, width, height):
     """base64 data URL 이미지를 슬라이드에 추가"""
     try:
-        # "data:image/png;base64,XXXX" 형식에서 b64 부분 추출
         b64_part = data_url.split(",", 1)[1]
         img_bytes = base64.b64decode(b64_part)
-        img_buf = BytesIO(img_bytes)
-        slide.shapes.add_picture(img_buf, left, top, width, height)
+        slide.shapes.add_picture(BytesIO(img_bytes), left, top, width, height)
     except Exception:
-        pass  # 이미지 파싱 실패 시 무시하고 계속
+        pass
 
 
 def _add_rect(slide, left, top, width, height, color: RGBColor):
-    """단색 직사각형 도형 추가 (구분선, 배지 배경 등)"""
-    shape = slide.shapes.add_shape(
-        1,  # MSO_SHAPE_TYPE.RECTANGLE
-        left, top, width, height
-    )
-    shape.line.fill.background()          # 테두리 없음
+    """단색 직사각형 도형 추가"""
+    shape = slide.shapes.add_shape(1, left, top, width, height)
+    shape.line.fill.background()
     shape.fill.solid()
     shape.fill.fore_color.rgb = color
     return shape
@@ -78,7 +78,7 @@ def _add_rect(slide, left, top, width, height, color: RGBColor):
 def _add_text(slide, text, left, top, width, height,
               size=24, color=TEXT_PRI, bold=False,
               align=PP_ALIGN.LEFT, wrap=True, italic=False):
-    """텍스트박스 추가 후 스타일 적용"""
+    """텍스트박스 추가 후 스타일 적용. shape 반환."""
     txBox = slide.shapes.add_textbox(left, top, width, height)
     tf = txBox.text_frame
     tf.word_wrap = wrap
@@ -90,16 +90,15 @@ def _add_text(slide, text, left, top, width, height,
     run.font.color.rgb = color
     run.font.bold = bold
     run.font.italic = italic
-    # 한국어 폰트 지정
-    run.font.name = '맑은 고딕'
+    run.font.name = KO_FONT
     return txBox
 
 
 def _add_bullet_list(slide, items: list[str], left, top, width, height,
                      size=20, color=TEXT_PRI):
-    """불릿 리스트 텍스트박스 추가"""
+    """불릿 리스트 텍스트박스 추가. shape 반환."""
     if not items:
-        return
+        return None
     txBox = slide.shapes.add_textbox(left, top, width, height)
     tf = txBox.text_frame
     tf.word_wrap = True
@@ -107,27 +106,106 @@ def _add_bullet_list(slide, items: list[str], left, top, width, height,
     for i, item in enumerate(items):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.alignment = PP_ALIGN.LEFT
-        # 불릿 기호
         dot = p.add_run()
         dot.text = '▸  '
         dot.font.size = Pt(size - 2)
         dot.font.color.rgb = ACCENT
-        dot.font.name = '맑은 고딕'
-        # 항목 텍스트
+        dot.font.name = KO_FONT
         run = p.add_run()
         run.text = item
         run.font.size = Pt(size)
         run.font.color.rgb = color
-        run.font.name = '맑은 고딕'
+        run.font.name = KO_FONT
 
-        # 항목 간격
-        from pptx.oxml.ns import qn
-        from lxml import etree
+        # 항목 간 위 여백
         pPr = p._p.get_or_add_pPr()
-        pPr.set(qn('a:spcBef'), '0')
+        existing_spc = pPr.find(qn('a:spcBef'))
+        if existing_spc is not None:
+            pPr.remove(existing_spc)
         spcBef = etree.SubElement(pPr, qn('a:spcBef'))
         spc = etree.SubElement(spcBef, qn('a:spcPts'))
-        spc.set('val', '160')  # 1.6pt 위 여백
+        spc.set('val', '160')
+
+    return txBox
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 슬라이드 효과 (전환 & 애니메이션)
+# ═══════════════════════════════════════════════════════════════════════
+
+def _add_slide_transition(ppt_slide):
+    """슬라이드 페이드 전환 효과 추가"""
+    sld = ppt_slide._element
+    trans = etree.SubElement(sld, f'{{{_P}}}transition', spd='med')
+    etree.SubElement(trans, f'{{{_P}}}fade')
+
+
+def _add_click_animations(ppt_slide, shape_ids: list[int]):
+    """
+    지정된 shape들이 클릭 순서대로 나타나는 애니메이션 추가.
+    PowerPoint 'Appear' 효과(presetID=1) — 클릭 전 숨김, 클릭 시 표시.
+    """
+    if not shape_ids:
+        return
+
+    sld = ppt_slide._element
+    _c = [1]
+
+    def nid():
+        v = _c[0]; _c[0] += 1; return str(v)
+
+    def sub(parent, tag, **kw):
+        return etree.SubElement(parent, f'{{{_P}}}{tag}',
+                                 **{k: str(v) for k, v in kw.items()})
+
+    timing  = sub(sld, 'timing')
+    tnLst   = sub(timing, 'tnLst')
+    par0    = sub(tnLst, 'par')
+    cTn0    = sub(par0, 'cTn', id=nid(), dur='indefinite',
+                   restart='whenNotActive', nodeType='tmRoot')
+    cTnL0   = sub(cTn0, 'childTnLst')
+    seq     = sub(cTnL0, 'seq', concurrent='1', nextAc='seek')
+    cTn1    = sub(seq, 'cTn', id=nid(), dur='indefinite', nodeType='mainSeq')
+    cTnL1   = sub(cTn1, 'childTnLst')
+
+    for i, spid in enumerate(shape_ids):
+        par      = sub(cTnL1, 'par')
+        cTn_cl   = sub(par, 'cTn', id=nid(), fill='hold')
+        stCL     = sub(cTn_cl, 'stCondLst')
+        cond     = sub(stCL, 'cond', evt='onClick', delay='0')
+        sub(cond, 'tn')
+
+        cTnL2   = sub(cTn_cl, 'childTnLst')
+        par2    = sub(cTnL2, 'par')
+        cTn_fx  = sub(par2, 'cTn', id=nid(),
+                       presetID='1', presetClass='entr', presetSubtype='0',
+                       fill='hold', grpId=str(i), nodeType='clickEffect')
+        stCL2   = sub(cTn_fx, 'stCondLst')
+        sub(stCL2, 'cond', delay='0')
+
+        cTnL3   = sub(cTn_fx, 'childTnLst')
+        set_el  = sub(cTnL3, 'set')
+        cBhvr   = sub(set_el, 'cBhvr')
+        cTn_bh  = sub(cBhvr, 'cTn', id=nid(), dur='1', fill='hold')
+        stCL3   = sub(cTn_bh, 'stCondLst')
+        sub(stCL3, 'cond', delay='0')
+        tgtEl   = sub(cBhvr, 'tgtEl')
+        sub(tgtEl, 'spTgt', spid=str(spid))
+        attrNL  = sub(cBhvr, 'attrNameLst')
+        aName   = sub(attrNL, 'attrName')
+        aName.text = 'style.visibility'
+        to_el   = sub(set_el, 'to')
+        sub(to_el, 'strVal', val='visible')
+
+    # 이전/다음 클릭 조건 (슬라이드 탐색용)
+    prevCL = sub(seq, 'prevCondLst')
+    prev   = sub(prevCL, 'cond', evt='onPrevClick', delay='0')
+    sub(prev, 'tn')
+    nextCL = sub(seq, 'nextCondLst')
+    nxt    = sub(nextCL, 'cond', evt='onNextClick', delay='0')
+    sub(nxt, 'tn')
+
+    sub(timing, 'bldLst')
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -136,7 +214,6 @@ def _add_bullet_list(slide, items: list[str], left, top, width, height,
 
 def _parse_slides(html: str) -> list[dict]:
     """<section class="slide ..."> 요소를 슬라이드 데이터로 파싱"""
-    # section 태그 단위로 분리
     sections = re.findall(
         r'<section[^>]+class="([^"]*slide[^"]*)"[^>]*>(.*?)</section>',
         html, re.DOTALL | re.IGNORECASE
@@ -144,7 +221,6 @@ def _parse_slides(html: str) -> list[dict]:
 
     slides = []
     for classes, inner in sections:
-        # 슬라이드 타입 결정
         if 'slide--intro' in classes:
             stype = 'intro'
         elif 'slide--end' in classes:
@@ -156,7 +232,6 @@ def _parse_slides(html: str) -> list[dict]:
         else:
             stype = 'content'
 
-        # 제목 추출 (h1 > h2 > h3 우선순위)
         h1 = re.search(r'<h1[^>]*>(.*?)</h1>', inner, re.DOTALL)
         h2 = re.search(r'<h2[^>]*>(.*?)</h2>', inner, re.DOTALL)
         h3 = re.search(r'<h3[^>]*>(.*?)</h3>', inner, re.DOTALL)
@@ -164,17 +239,14 @@ def _parse_slides(html: str) -> list[dict]:
             (h1 or h2 or h3).group(1) if (h1 or h2 or h3) else ''
         )
 
-        # terminal-badge (키워드 태그)
         badge = re.search(
             r'class="terminal-badge[^"]*"[^>]*>(.*?)</div>', inner, re.DOTALL
         )
         badge_text = _strip_tags(badge.group(1)) if badge else ''
 
-        # 불릿 항목 (li)
         items = [_strip_tags(m) for m in re.findall(r'<li[^>]*>(.*?)</li>', inner, re.DOTALL)]
         items = [x for x in items if x]
 
-        # 일반 단락 (li 블록 제외)
         no_list = re.sub(r'<ul[^>]*>.*?</ul>', '', inner, flags=re.DOTALL)
         no_list = re.sub(r'<ol[^>]*>.*?</ol>', '', no_list, flags=re.DOTALL)
         paras = [
@@ -183,18 +255,15 @@ def _parse_slides(html: str) -> list[dict]:
         ]
         paras = [x for x in paras if x and len(x) > 1]
 
-        # split-card 텍스트 (다이어그램 슬라이드용)
         cards = [
             _strip_tags(m)
             for m in re.findall(r'class="split-card[^"]*"[^>]*>(.*?)</div>', inner, re.DOTALL)
         ]
         cards = [x for x in cards if x]
 
-        # 코드 블록 (code)
         code_block = re.search(r'<code[^>]*>(.*?)</code>', inner, re.DOTALL)
         code_text = _strip_tags(code_block.group(1)) if code_block else ''
 
-        # 이미지 (base64 data URL 또는 src 추출)
         img_urls = re.findall(r'<img[^>]+src="(data:[^"]+)"', inner, re.DOTALL)
 
         slides.append({
@@ -205,111 +274,123 @@ def _parse_slides(html: str) -> list[dict]:
             'paras':  paras,
             'cards':  cards,
             'code':   code_text,
-            'images': img_urls,  # base64 data URL 리스트
+            'images': img_urls,
         })
 
     return slides
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 슬라이드 타입별 렌더러
+# 슬라이드 타입별 렌더러 — 애니메이션할 shape_id 목록 반환
 # ═══════════════════════════════════════════════════════════════════════
 
-def _slide_intro(slide, data: dict):
+def _slide_intro(slide, data: dict) -> list[int]:
     """타이틀 슬라이드 (slide--intro)"""
     _set_bg(slide, BG)
-
-    # 왼쪽 금색 세로 강조선
     _add_rect(slide, Inches(0.4), Inches(1.5), Inches(0.06), Inches(4.5), ACCENT)
 
-    # badge
     if data['badge']:
         _add_text(slide, f'> {data["badge"]}',
                   MARGIN_L, Inches(1.6), CONTENT_W, Inches(0.5),
                   size=14, color=ACCENT, bold=True)
 
-    # 제목
     _add_text(slide, data['title'],
               MARGIN_L, Inches(2.2), CONTENT_W, Inches(2.0),
               size=40, color=TEXT_PRI, bold=True)
 
-    # 수평 강조선
     _add_rect(slide, MARGIN_L, Inches(4.4), Inches(1.2), Inches(0.04), ACCENT)
 
-    # 부제 (파라 첫 번째)
     if data['paras']:
         _add_text(slide, data['paras'][0],
                   MARGIN_L, Inches(4.6), CONTENT_W, Inches(0.8),
                   size=18, color=TEXT_SEC)
 
-    # 안내 텍스트
     _add_text(slide, '← → 키 또는 버튼으로 이동',
               MARGIN_L, Inches(6.6), CONTENT_W, Inches(0.5),
               size=12, color=TEXT_DIM)
+    return []
 
 
-def _slide_content(slide, data: dict):
-    """일반 콘텐츠 슬라이드 (slide--content / slide--content-alt)"""
+def _slide_content(slide, data: dict) -> list[int]:
+    """일반 콘텐츠 슬라이드. 클릭 애니메이션할 shape_id 목록 반환."""
     _set_bg(slide, BG)
-
-    # 상단 금색 얇은 선
     _add_rect(slide, 0, 0, W, Inches(0.04), ACCENT)
 
+    anim_ids: list[int] = []
     top = MARGIN_T
 
-    # badge
     if data['badge']:
         _add_text(slide, f'> {data["badge"]}',
                   MARGIN_L, top, CONTENT_W, Inches(0.45),
                   size=13, color=ACCENT, bold=True)
         top += Inches(0.5)
 
-    # 제목
     if data['title']:
         _add_text(slide, data['title'],
                   MARGIN_L, top, CONTENT_W, Inches(1.0),
                   size=28, color=TEXT_PRI, bold=True)
         top += Inches(1.0)
 
-    # 강조선
     _add_rect(slide, MARGIN_L, top, Inches(0.8), Inches(0.035), ACCENT)
     top += Inches(0.25)
 
     images = data.get('images', [])
 
     if images:
-        # 이미지 있으면: 왼쪽 텍스트 + 오른쪽 이미지 2열 레이아웃
-        half_w = (CONTENT_W - Inches(0.4)) / 2
-        # 왼쪽: 불릿
+        half_w   = (CONTENT_W - Inches(0.4)) / 2
+        text_top = top  # 텍스트 위치는 독립적으로 관리 (이미지와 분리)
+
         if data['items']:
-            item_h = Inches(0.45) * len(data['items']) + Inches(0.3)
-            _add_bullet_list(slide, data['items'],
-                             MARGIN_L, top, half_w, item_h, size=18)
+            item_h = min(
+                Inches(0.48) * len(data['items']) + Inches(0.4),
+                H - text_top - Inches(0.5)
+            )
+            bx = _add_bullet_list(slide, data['items'],
+                                   MARGIN_L, text_top, half_w, item_h, size=17)
+            if bx:
+                anim_ids.append(bx.shape_id)
+            text_top += item_h
+
         for para in data['paras']:
-            _add_text(slide, para,
-                      MARGIN_L, top, half_w, Inches(0.7),
-                      size=16, color=TEXT_SEC)
-            top += Inches(0.65)
-        # 오른쪽: 이미지 (첫 번째 이미지만 사용)
+            if text_top + Inches(0.7) > H - Inches(0.3):
+                break
+            bx = _add_text(slide, para,
+                            MARGIN_L, text_top, half_w, Inches(0.7),
+                            size=15, color=TEXT_SEC)
+            anim_ids.append(bx.shape_id)
+            text_top += Inches(0.65)
+
+        # 오른쪽 이미지 (첫 번째만 사용)
         img_left = MARGIN_L + half_w + Inches(0.4)
         img_top  = MARGIN_T + Inches(1.4)
         img_h    = H - img_top - Inches(0.6)
         _add_image_from_b64(slide, images[0], img_left, img_top, half_w, img_h)
+
     else:
-        # 이미지 없으면: 기존 레이아웃
         if data['items']:
-            item_h = Inches(0.5) * len(data['items']) + Inches(0.5)
-            _add_bullet_list(slide, data['items'],
-                             MARGIN_L, top, CONTENT_W, item_h, size=20)
+            item_h = min(
+                Inches(0.5) * len(data['items']) + Inches(0.5),
+                H - top - Inches(0.5)
+            )
+            bx = _add_bullet_list(slide, data['items'],
+                                   MARGIN_L, top, CONTENT_W, item_h, size=20)
+            if bx:
+                anim_ids.append(bx.shape_id)
             top += item_h
+
         for para in data['paras']:
-            _add_text(slide, para,
-                      MARGIN_L, top, CONTENT_W, Inches(0.8),
-                      size=18, color=TEXT_SEC)
+            if top + Inches(0.8) > H - Inches(0.3):
+                break
+            bx = _add_text(slide, para,
+                            MARGIN_L, top, CONTENT_W, Inches(0.8),
+                            size=18, color=TEXT_SEC)
+            anim_ids.append(bx.shape_id)
             top += Inches(0.75)
 
+    return anim_ids
 
-def _slide_diagram(slide, data: dict):
+
+def _slide_diagram(slide, data: dict) -> list[int]:
     """분할 레이아웃 슬라이드 (slide--diagram)"""
     _set_bg(slide, BG)
     _add_rect(slide, 0, 0, W, Inches(0.04), ACCENT)
@@ -330,27 +411,25 @@ def _slide_diagram(slide, data: dict):
     _add_rect(slide, MARGIN_L, top, Inches(0.8), Inches(0.035), ACCENT)
     top += Inches(0.3)
 
-    # 카드 2열 배치
     card_w = (CONTENT_W - Inches(0.4)) / 2
     card_h = Inches(3.0)
-    gap = Inches(0.4)
+    gap    = Inches(0.4)
 
     for i, card_text in enumerate(data['cards'][:2]):
         cx = MARGIN_L + i * (card_w + gap)
-        # 카드 배경
         bg_shape = slide.shapes.add_shape(1, cx, top, card_w, card_h)
         bg_shape.fill.solid()
         bg_shape.fill.fore_color.rgb = RGBColor(0x11, 0x11, 0x18)
         bg_shape.line.color.rgb = RGBColor(0x1E, 0x1C, 0x18)
         bg_shape.line.width = Pt(1)
-        # 카드 텍스트
         _add_text(slide, card_text,
                   cx + Inches(0.2), top + Inches(0.3),
                   card_w - Inches(0.4), card_h - Inches(0.4),
                   size=17, color=TEXT_PRI, wrap=True)
+    return []
 
 
-def _slide_code(slide, data: dict):
+def _slide_code(slide, data: dict) -> list[int]:
     """코드 슬라이드 (slide--code)"""
     _set_bg(slide, BG)
     _add_rect(slide, 0, 0, W, Inches(0.04), ACCENT)
@@ -363,7 +442,6 @@ def _slide_code(slide, data: dict):
         top += Inches(1.0)
 
     if data['code']:
-        # 코드 블록 배경
         code_h = Inches(4.5)
         bg = slide.shapes.add_shape(1, MARGIN_L, top, CONTENT_W, code_h)
         bg.fill.solid()
@@ -374,9 +452,10 @@ def _slide_code(slide, data: dict):
                   MARGIN_L + Inches(0.2), top + Inches(0.2),
                   CONTENT_W - Inches(0.4), code_h - Inches(0.4),
                   size=15, color=TEXT_PRI, wrap=True)
+    return []
 
 
-def _slide_end(slide, data: dict):
+def _slide_end(slide, data: dict) -> list[int]:
     """마무리 슬라이드 (slide--end)"""
     _set_bg(slide, BG)
 
@@ -391,6 +470,7 @@ def _slide_end(slide, data: dict):
         _add_text(slide, data['paras'][0],
                   Inches(1), Inches(4.3), W - Inches(2), Inches(0.8),
                   size=20, color=TEXT_SEC, align=PP_ALIGN.CENTER)
+    return []
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -408,7 +488,6 @@ def build_pptx(html: str) -> bytes:
     prs.slide_width  = W
     prs.slide_height = H
 
-    # 빈 레이아웃(인덱스 6) 사용 — 텍스트박스/도형 자유 배치
     blank_layout = prs.slide_layouts[6]
 
     renderer = {
@@ -422,7 +501,14 @@ def build_pptx(html: str) -> bytes:
     for data in slides_data:
         ppt_slide = prs.slides.add_slide(blank_layout)
         fn = renderer.get(data['type'], _slide_content)
-        fn(ppt_slide, data)
+        anim_ids = fn(ppt_slide, data)
+
+        # 슬라이드 전환 효과 (페이드) — transition은 timing보다 먼저 추가
+        _add_slide_transition(ppt_slide)
+
+        # 클릭시 나타나기 애니메이션
+        if anim_ids:
+            _add_click_animations(ppt_slide, anim_ids)
 
     buf = BytesIO()
     prs.save(buf)
