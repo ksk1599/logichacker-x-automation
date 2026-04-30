@@ -406,17 +406,25 @@ ul li::before { content: '→ '; color: var(--accent); font-weight: bold; font-f
 /* ── 슬라이드 이미지 ──────────────────────────────────────────────── */
 .slide-img {
   max-width: 100%;
-  max-height: 42vh;
+  max-height: 40vh;
   border-radius: 8px;
   object-fit: contain;
   display: block;
 }
-/* 텍스트 + 이미지 2열 레이아웃 */
+/* 텍스트 + 이미지 2열 레이아웃: 텍스트 55% / 이미지 45% */
 .img-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 55fr 45fr;
   gap: 1.5rem;
   align-items: center;
+  width: 100%;
+}
+/* img-split 안 텍스트: 한국어 단어 보호 + 줄바꿈 자연스럽게 */
+.img-split ul,
+.img-split p {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  hyphens: none;
 }
 /* 이미지만 중앙 배치 */
 .img-center {
@@ -430,6 +438,15 @@ ul li::before { content: '→ '; color: var(--accent); font-weight: bold; font-f
   color: var(--text-dim);
   text-align: center;
   margin-top: 0.3rem;
+}
+/* 전체 슬라이드 텍스트 한국어 단어 보호 */
+.slide li,
+.slide p,
+.slide h1,
+.slide h2,
+.slide h3 {
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 </style>
 </head>
