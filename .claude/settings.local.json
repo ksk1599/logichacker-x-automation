@@ -29,7 +29,8 @@
       "Bash(schtasks /query /tn \"로직해커엑스_웹앱\")",
       "PowerShell(schtasks /query /tn \"������Ŀ����_����\" /fo LIST)",
       "Bash(.venv/Scripts/python -c \"import claude_client; print\\('OK'\\)\")",
-      "Bash(.venv/Scripts/python -c \"import app; print\\('OK'\\)\")"
+      "Bash(.venv/Scripts/python -c \"import app; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/python -c \"import claude_client, app; print\\('OK'\\)\")"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
