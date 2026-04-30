@@ -25,7 +25,9 @@
       "PowerShell(& \"C:\\\\Users\\\\yk920\\\\Downloads\\\\로직해커 엑스 자동화 프로젝트\\\\webapp\\\\.venv\\\\Scripts\\\\pip.exe\" install python-pptx>=0.6.21 --quiet)",
       "Bash(.venv/Scripts/python -c ' *)",
       "Bash(git add *)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(schtasks /query /tn \"로직해커엑스_웹앱\")",
+      "PowerShell(schtasks /query /tn \"������Ŀ����_����\" /fo LIST)"
     ]
   },
   "outputStyle": "beginner를 위한 설명 추가"
