@@ -105,7 +105,6 @@ def capture_slides(html: str, progress_callback=None) -> list[bytes]:
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.chrome.service import Service
-        from selenium.webdriver.common.by import By
         from webdriver_manager.chrome import ChromeDriverManager
     except ImportError as e:
         raise RuntimeError(
@@ -150,6 +149,21 @@ def capture_slides(html: str, progress_callback=None) -> list[bytes]:
         # 폰트·이미지 로딩 대기
         time.sleep(2.5)
 
+        # html/body가 정확히 1920×1080을 채우도록 JS로 한 번 더 강제
+        driver.execute_script(f"""
+            document.documentElement.style.cssText =
+                'margin:0;padding:0;overflow:hidden;width:{CAPTURE_W}px;height:{CAPTURE_H}px;';
+            document.body.style.cssText =
+                'margin:0;padding:0;overflow:hidden;width:{CAPTURE_W}px;height:{CAPTURE_H}px;background:#0a0a0f;';
+            var vp = document.getElementById('viewport') ||
+                     document.querySelector('.slide-viewport');
+            if (vp) {{
+                vp.style.cssText =
+                    'position:fixed;top:0;left:0;width:{CAPTURE_W}px;height:{CAPTURE_H}px;' +
+                    'overflow:hidden;z-index:1;background:#0a0a0f;';
+            }}
+        """)
+
         # 총 슬라이드 수
         total = driver.execute_script(
             'return (document.getElementById("viewport") || document.querySelector(".slide-viewport") || document.body)'
@@ -158,12 +172,6 @@ def capture_slides(html: str, progress_callback=None) -> list[bytes]:
         if not total:
             raise RuntimeError("슬라이드를 찾을 수 없습니다. HTML 구조를 확인하세요.")
 
-        # #viewport 요소 (element 단위 스크린샷용)
-        try:
-            vp_el = driver.find_element(By.CSS_SELECTOR, '#viewport, .slide-viewport')
-        except Exception:
-            vp_el = None
-
         screenshots: list[bytes] = []
         for i in range(total):
             if progress_callback:
@@ -171,17 +179,10 @@ def capture_slides(html: str, progress_callback=None) -> list[bytes]:
 
             # CSS transition 없이 슬라이드 즉시 전환
             driver.execute_script(_go_slide_js(i))
-            time.sleep(0.2)
+            time.sleep(0.3)
 
-            # viewport 요소 스크린샷 우선 (여백 제거 보장)
-            if vp_el:
-                try:
-                    png = vp_el.screenshot_as_png
-                    screenshots.append(_ensure_size(png))
-                    continue
-                except Exception:
-                    pass
-            # fallback: 전체 화면 스크린샷
+            # CDP가 창을 1920×1080으로 고정했으므로 전체 화면 스크린샷 = 정확히 1920×1080
+            # (요소 단위 캡처는 요소 크기에 따라 작게 찍혀 빈 여백이 생기므로 사용하지 않음)
             screenshots.append(_ensure_size(driver.get_screenshot_as_png()))
 
         return screenshots

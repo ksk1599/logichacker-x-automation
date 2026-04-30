@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 from claude_client import call_thumbnail, call_script, call_full_script, call_html_presentation
 from pptx_builder import build_pptx
-from slide_capture import html_to_pptx
 from auto_save import (
     get_next_thumbnail_letter,
     get_next_script_number,
@@ -276,30 +275,26 @@ with tab_ppt:
             st.caption("브라우저에서 열면 방향키·전체화면 지원")
 
         with col_pptx:
-            # Chrome으로 슬라이드를 그대로 캡처 → PPTX (웹과 100% 동일)
             if st.session_state.get("ppt_pptx_bytes") is None:
-                with st.spinner("Chrome으로 슬라이드 렌더링 중... (첫 실행 시 ChromeDriver 다운로드로 1~2분 소요)"):
+                with st.spinner("PPT 파일 생성 중..."):
                     try:
-                        pptx_bytes = html_to_pptx(html_result)
+                        pptx_bytes = build_pptx(html_result)
                         st.session_state["ppt_pptx_bytes"] = pptx_bytes
-                    except RuntimeError as e:
-                        st.error(f"PPT 변환 오류: {e}")
-                        st.session_state["ppt_pptx_bytes"] = None
                     except Exception as e:
-                        st.error(f"PPT 변환 오류 (Chrome 설치 여부 확인): {e}")
+                        st.error(f"PPT 변환 오류: {e}")
                         st.session_state["ppt_pptx_bytes"] = None
 
             pptx_bytes = st.session_state.get("ppt_pptx_bytes")
             if pptx_bytes:
                 st.download_button(
-                    label="⬇️ PPT 다운로드 (웹과 동일)",
+                    label="⬇️ PPT 다운로드 (편집 가능)",
                     data=pptx_bytes,
                     file_name=f"{safe_title}.pptx",
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     key="ppt_pptx_btn",
                     use_container_width=True,
                 )
-                st.caption("웹 화면을 슬라이드별 캡처 — 폰트·레이아웃 100% 동일")
+                st.caption("텍스트·이미지 편집 가능 | 페이드 전환·클릭 애니메이션 포함")
 
         st.divider()
         st.caption("👇 미리보기 — 방향키로 슬라이드를 넘겨보세요 (클릭 후 키 입력)")

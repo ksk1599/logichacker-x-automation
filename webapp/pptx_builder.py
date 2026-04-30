@@ -33,8 +33,9 @@ CONTENT_W = W - MARGIN_L - MARGIN_R
 # PPTX 네임스페이스
 _P = 'http://schemas.openxmlformats.org/presentationml/2006/main'
 
-# 사용할 한국어 폰트 (Windows 기본 내장)
-KO_FONT = 'Malgun Gothic'
+# Noto Sans KR이 설치되어 있으면 웹과 동일한 글꼴, 없으면 Malgun Gothic 대체
+# (PowerPoint가 열릴 때 시스템에 없는 폰트는 자동으로 유사 폰트로 대체됨)
+KO_FONT = 'Noto Sans KR'
 
 
 # ═══════════════════════════════════════════════════════════════════════
