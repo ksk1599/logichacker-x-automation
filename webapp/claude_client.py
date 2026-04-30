@@ -177,23 +177,97 @@ def call_script(
     return resp.content[0].text
 
 
+def _load_ref_images() -> tuple[dict[str, str], str]:
+    """
+    ppt/참고자료/ 폴더에서 번호 이미지(1~9.PNG/png/jpg)를 로드.
+    반환: (placeholder→base64_data_url 딕셔너리, Claude용 이미지 안내 문자열)
+    """
+    import json as _json
+    ref_dir = BASE_DIR / "ppt" / "참고자료"
+    if not ref_dir.exists():
+        return {}, ""
+
+    # metadata.json 로드 (이미지 설명)
+    meta_path = ref_dir / "metadata.json"
+    meta: dict[str, str] = {}
+    if meta_path.exists():
+        meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+
+    placeholders: dict[str, str] = {}
+    desc_lines: list[str] = []
+
+    for i in range(1, 10):
+        for ext in ("PNG", "png", "jpg", "jpeg"):
+            img_path = ref_dir / f"{i}.{ext}"
+            if img_path.exists():
+                raw = img_path.read_bytes()
+                b64 = base64.standard_b64encode(raw).decode()
+                mime = "image/png" if ext.lower() == "png" else "image/jpeg"
+                data_url = f"data:{mime};base64,{b64}"
+                key = f"{{{{IMG_{i}}}}}"
+                placeholders[key] = data_url
+                desc = meta.get(str(i), f"이미지 {i}")
+                desc_lines.append(f"  - {{{{IMG_{i}}}}}: {desc}")
+                break  # 첫 번째 확장자 매칭으로 중단
+
+    if not placeholders:
+        return {}, ""
+
+    instruction = (
+        "\n\n## 사용 가능한 참고 이미지\n"
+        "원고에서 아래 이미지와 관련된 주제가 나오면 해당 슬라이드에 삽입하세요.\n"
+        + "\n".join(desc_lines)
+        + """
+
+### 이미지 삽입 방법
+텍스트와 이미지를 나란히 배치할 때 (img-split 레이아웃):
+```
+<div class="img-split reveal">
+  <div>
+    <ul><li>핵심 내용</li></ul>
+  </div>
+  <div>
+    <img class="slide-img" src="{{IMG_N}}" alt="설명">
+    <p class="img-caption">출처 또는 설명</p>
+  </div>
+</div>
+```
+
+이미지만 강조해서 보여줄 때 (img-center 레이아웃):
+```
+<div class="img-center reveal">
+  <img class="slide-img" src="{{IMG_N}}" alt="설명">
+</div>
+<p class="img-caption reveal">설명 텍스트</p>
+```
+
+중요: {{IMG_N}}을 그대로 텍스트로 출력하세요. Python이 실제 이미지 데이터로 교체합니다.
+"""
+    )
+    return placeholders, instruction
+
+
 def call_html_presentation(title: str, script: str) -> str:
     """
     원고 → HTML 프레젠테이션.
     Claude는 <section> 슬라이드만 생성하고,
     Python이 검증된 템플릿 CSS·JS에 직접 주입한다.
+    참고자료 폴더에 이미지가 있으면 자동으로 슬라이드에 삽입한다.
     """
     template_path = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "references" / "template.html"
     skill_path    = BASE_DIR / "ppt" / "ppt-maker-plugin" / "skills" / "ppt-maker" / "SKILL.md"
     template = template_path.read_text(encoding="utf-8")
     skill_md = _strip_frontmatter(skill_path.read_text(encoding="utf-8"))
 
+    # 참고 이미지 로드
+    img_placeholders, img_instruction = _load_ref_images()
+
     system = f"""당신은 HTML 강의 슬라이드 작성 전문가입니다.
 사용자의 강의 원고를 슬라이드 섹션으로 변환합니다.
 
 ## 슬라이드 제작 규칙
 {skill_md}
-
+{img_instruction}
 ## 출력 규칙 (매우 중요)
 - <section> 요소들만 출력하세요. HTML 전체 파일 금지.
 - 출력 시작: <section class="slide slide--intro active" id="slide-1"
@@ -211,7 +285,7 @@ def call_html_presentation(title: str, script: str) -> str:
 
     resp = _get_client().messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=6000,
+        max_tokens=8000,
         system=system,
         messages=[{"role": "user", "content": user_content}],
     )
@@ -221,19 +295,21 @@ def call_html_presentation(title: str, script: str) -> str:
     if "```" in slides_html:
         slides_html = re.sub(r"```[a-zA-Z]*\n?", "", slides_html).strip()
 
+    # {{IMG_N}} 플레이스홀더를 실제 base64 데이터 URL로 교체
+    for placeholder, data_url in img_placeholders.items():
+        slides_html = slides_html.replace(placeholder, data_url)
+
     # 슬라이드 수 계산
     slide_count = len(re.findall(r'<section\s+class="slide', slides_html))
     if slide_count == 0:
         slide_count = 1
 
     # ── 템플릿에 슬라이드 주입 ──────────────────────────────────────
-    # viewport div 안의 기존 슬라이드 콘텐츠를 교체
     marker_start = '<div class="slide-viewport" id="viewport">'
     marker_nav   = '<!-- 네비게이션 UI -->'
 
     vp_start = template.index(marker_start) + len(marker_start)
     nav_pos  = template.index(marker_nav)
-    # viewport 닫는 </div> 위치 (네비게이션 주석 바로 앞)
     vp_end   = template.rindex('</div>', 0, nav_pos)
 
     result = (
@@ -242,7 +318,7 @@ def call_html_presentation(title: str, script: str) -> str:
         + template[vp_end:]
     )
 
-    # 슬라이드 카운터 초기값 업데이트 (01 / 10 → 01 / NN)
+    # 슬라이드 카운터 초기값 업데이트
     padded = str(slide_count).zfill(2)
     result = result.replace(">01 / 10<", f">01 / {padded}<")
 

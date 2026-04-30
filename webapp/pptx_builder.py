@@ -3,6 +3,7 @@ pptx_builder.py — HTML 슬라이드 → .pptx 변환
 HTML의 <section> 요소를 파싱해 다크 테마 PowerPoint 파일을 생성한다.
 """
 
+import base64
 import re
 from io import BytesIO
 
@@ -48,6 +49,18 @@ def _set_bg(slide, color: RGBColor):
     fill = slide.background.fill
     fill.solid()
     fill.fore_color.rgb = color
+
+
+def _add_image_from_b64(slide, data_url: str, left, top, width, height):
+    """base64 data URL 이미지를 슬라이드에 추가"""
+    try:
+        # "data:image/png;base64,XXXX" 형식에서 b64 부분 추출
+        b64_part = data_url.split(",", 1)[1]
+        img_bytes = base64.b64decode(b64_part)
+        img_buf = BytesIO(img_bytes)
+        slide.shapes.add_picture(img_buf, left, top, width, height)
+    except Exception:
+        pass  # 이미지 파싱 실패 시 무시하고 계속
 
 
 def _add_rect(slide, left, top, width, height, color: RGBColor):
@@ -181,6 +194,9 @@ def _parse_slides(html: str) -> list[dict]:
         code_block = re.search(r'<code[^>]*>(.*?)</code>', inner, re.DOTALL)
         code_text = _strip_tags(code_block.group(1)) if code_block else ''
 
+        # 이미지 (base64 data URL 또는 src 추출)
+        img_urls = re.findall(r'<img[^>]+src="(data:[^"]+)"', inner, re.DOTALL)
+
         slides.append({
             'type':   stype,
             'title':  title,
@@ -189,6 +205,7 @@ def _parse_slides(html: str) -> list[dict]:
             'paras':  paras,
             'cards':  cards,
             'code':   code_text,
+            'images': img_urls,  # base64 data URL 리스트
         })
 
     return slides
@@ -258,20 +275,38 @@ def _slide_content(slide, data: dict):
     _add_rect(slide, MARGIN_L, top, Inches(0.8), Inches(0.035), ACCENT)
     top += Inches(0.25)
 
-    # 불릿 항목
-    if data['items']:
-        item_h = Inches(0.5) * len(data['items']) + Inches(0.5)
-        _add_bullet_list(slide, data['items'],
-                         MARGIN_L, top, CONTENT_W, item_h,
-                         size=20)
-        top += item_h
+    images = data.get('images', [])
 
-    # 일반 단락
-    for para in data['paras']:
-        _add_text(slide, para,
-                  MARGIN_L, top, CONTENT_W, Inches(0.8),
-                  size=18, color=TEXT_SEC)
-        top += Inches(0.75)
+    if images:
+        # 이미지 있으면: 왼쪽 텍스트 + 오른쪽 이미지 2열 레이아웃
+        half_w = (CONTENT_W - Inches(0.4)) / 2
+        # 왼쪽: 불릿
+        if data['items']:
+            item_h = Inches(0.45) * len(data['items']) + Inches(0.3)
+            _add_bullet_list(slide, data['items'],
+                             MARGIN_L, top, half_w, item_h, size=18)
+        for para in data['paras']:
+            _add_text(slide, para,
+                      MARGIN_L, top, half_w, Inches(0.7),
+                      size=16, color=TEXT_SEC)
+            top += Inches(0.65)
+        # 오른쪽: 이미지 (첫 번째 이미지만 사용)
+        img_left = MARGIN_L + half_w + Inches(0.4)
+        img_top  = MARGIN_T + Inches(1.4)
+        img_h    = H - img_top - Inches(0.6)
+        _add_image_from_b64(slide, images[0], img_left, img_top, half_w, img_h)
+    else:
+        # 이미지 없으면: 기존 레이아웃
+        if data['items']:
+            item_h = Inches(0.5) * len(data['items']) + Inches(0.5)
+            _add_bullet_list(slide, data['items'],
+                             MARGIN_L, top, CONTENT_W, item_h, size=20)
+            top += item_h
+        for para in data['paras']:
+            _add_text(slide, para,
+                      MARGIN_L, top, CONTENT_W, Inches(0.8),
+                      size=18, color=TEXT_SEC)
+            top += Inches(0.75)
 
 
 def _slide_diagram(slide, data: dict):
